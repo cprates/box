@@ -1,0 +1,206 @@
+package runtime
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"strconv"
+	"syscall"
+
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
+)
+
+const execFifoFilename = "exec.fifo"
+
+const stdioFdCount = 3
+
+// TODO: just a mock while it is not reading from the spec
+var gConf = config{
+	Name:           "box1",
+	Hostname:       "box1hostname",
+	RootFs:         "/home/cpr3t4s/Workspace/lws/repo/fs",
+	EntryPoint:     "/bin/sleep",
+	EntryPointArgs: []string{"10"},
+}
+
+const (
+	StateCreating = iota
+	StateCreated
+	StateRunning
+	StateStopped
+)
+
+type boxRuntime struct {
+	root         string
+	childProcess process
+}
+
+type process struct {
+	state  int
+	pid    int
+	config config
+}
+
+type config struct {
+	Name           string
+	Hostname       string
+	RootFs         string
+	EntryPoint     string
+	EntryPointArgs []string // entryPoint args
+}
+
+type Runtimer interface {
+	Create() (err error)
+	Start(pid int) (err error)
+	//Run() (err error)
+	//Exec() (err error)
+}
+
+func New(root string) Runtimer {
+	p := process{
+		state:  StateCreating,
+		config: gConf,
+	}
+
+	return &boxRuntime{
+		root:         root,
+		childProcess: p,
+	}
+}
+
+func (b *boxRuntime) Create() (err error) {
+	log.Debugf("Creating Box %v \n", b.childProcess.config.Name)
+
+	dir := path.Join(b.root, b.childProcess.config.Name)
+	err = os.MkdirAll(dir, 0766)
+	if err != nil {
+		err = fmt.Errorf("while creating dir %q: %s", dir, err)
+		return
+	}
+
+	if err = b.createExecFifo(); err != nil {
+		err = fmt.Errorf("box: creating exec fifo: %s", err)
+		return
+	}
+
+	// this is a much simpler implementation compared to runC so, at this point it just needs
+	// to re-execute itself setting all the namespaces, except user ns.
+	err = b.start()
+	if err != nil {
+		b.deleteExecFifo()
+		err = fmt.Errorf("box: creating container: %s", err)
+		return
+	}
+
+	return
+}
+
+func (b *boxRuntime) createExecFifo() error {
+	fifoName := filepath.Join(b.root, b.childProcess.config.Name, execFifoFilename)
+	if _, err := os.Stat(fifoName); err == nil {
+		return fmt.Errorf("exec fifo %s already exists", fifoName)
+	}
+	oldMask := unix.Umask(0000)
+	if err := unix.Mkfifo(fifoName, 0622); err != nil {
+		unix.Umask(oldMask)
+		err = fmt.Errorf("unable to create fifo at %q: %s", fifoName, err)
+		return err
+	}
+	unix.Umask(oldMask)
+
+	// currently it does not support user namespaces so, uid and gid are always set to 0
+	return os.Chown(fifoName, 0, 0)
+}
+
+func (b *boxRuntime) deleteExecFifo() {
+	fifoName := filepath.Join(b.root, b.childProcess.config.Name, execFifoFilename)
+	os.Remove(fifoName)
+}
+
+// includeExecFifo opens the box's execfifo as a pathfd, so that the
+// box cannot access the statedir (and the FIFO itself remains
+// un-opened). It then adds the FifoFd to the given exec.Cmd as an inherited
+// fd, with BOX_FIFO_FD set to its fd number.
+func (b *boxRuntime) includeExecFifo(cmd *exec.Cmd) error {
+	fifoName := filepath.Join(b.root, b.childProcess.config.Name, execFifoFilename)
+	fifoFd, err := unix.Open(fifoName, unix.O_PATH|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return err
+	}
+
+	cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(uintptr(fifoFd), fifoName))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("BOX_FIFO_FD=%d", stdioFdCount+len(cmd.ExtraFiles)-1))
+	return nil
+}
+
+func (b *boxRuntime) start() (err error) {
+	cmd := exec.Command("/proc/self/exe", "bootstrap")
+	// TODO: set IO correctly
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags: syscall.CLONE_NEWUTS |
+			syscall.CLONE_NEWPID |
+			syscall.CLONE_NEWNS |
+			syscall.CLONE_NEWIPC |
+			syscall.CLONE_NEWNET,
+		//syscall.CLONE_NEWUSER,
+		Unshareflags: syscall.CLONE_NEWNS,
+	}
+
+	configRPipe, configWPipe, err := os.Pipe()
+	if err != nil {
+		err = fmt.Errorf("creating configPipe: %s", err)
+		return
+	}
+	defer configWPipe.Close()
+	defer configRPipe.Close()
+
+	cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(configRPipe.Fd(), "configPipe"))
+	configFd := stdioFdCount + len(cmd.ExtraFiles) - 1
+
+	cmd.Env = []string{
+		"BOX_BOOTSTRAP_CONFIG_FD=" + strconv.Itoa(configFd),
+		"BOX_BOOTSTRAP_LOG_FD=" + strconv.Itoa(int(os.Stdout.Fd())), // TODO: handle logging properly
+		"BOX_DEBUG=" + os.Getenv("BOX_DEBUG"),
+	}
+
+	// send box config
+	if err = json.NewEncoder(configWPipe).Encode(&b.childProcess.config); err != nil {
+		err = fmt.Errorf("sending config to child: %s", err)
+		return
+	}
+
+	if err = b.includeExecFifo(cmd); err != nil {
+		err = fmt.Errorf("including fifo fd: %s", err)
+		return
+	}
+
+	if err = cmd.Start(); err != nil {
+		err = fmt.Errorf("starting child: %s", err)
+		return
+	}
+
+	b.childProcess.pid = cmd.Process.Pid
+	b.childProcess.state = StateCreated
+
+	// TODO: delete after storing this in a state file
+	log.Printf("Box instance PID:::::: %d\n\n", cmd.Process.Pid)
+
+	// TODO
+	//go func() {
+	//	// TODO: Not sure but the doc string state that cmd.Wait releases resources, but this
+	//	//   will never return because this process will finish before the child
+	//	if err = cmd.Wait(); err != nil {
+	//		err = fmt.Errorf("box: bootstrapping box instance: %s", err)
+	//		return
+	//	}
+	//}()
+
+	return
+}
