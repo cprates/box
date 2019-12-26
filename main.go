@@ -7,6 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/cprates/box/runtime"
+	"github.com/cprates/box/spec"
 )
 
 const (
@@ -24,15 +25,25 @@ func main() {
 
 	switch goos.Args[idxAction] {
 	case "create":
+		config, err := spec.Load("config.json")
+		if err != nil {
+			log.Fatalln("Failed to load spec:", err)
+		}
+
 		wd, _ := goos.Getwd()
-		r := runtime.New(wd)
+		r := runtime.New("box1", wd, config)
 		if err := r.Create(); err != nil {
 			log.Error("Failed to create box:", err)
 			goos.Exit(-1)
 		}
 	case "start":
+		config, err := spec.Load("config.json")
+		if err != nil {
+			log.Fatalln("Failed to load spec:", err)
+		}
+
 		wd, _ := goos.Getwd()
-		r := runtime.New(wd)
+		r := runtime.New("box1", wd, config)
 		pid, err := strconv.Atoi(goos.Args[2])
 		if err != nil {
 			log.Error("Failed to start box:", err)

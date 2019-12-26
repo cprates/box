@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/cprates/box/spec"
+
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
@@ -17,15 +19,6 @@ import (
 const execFifoFilename = "exec.fifo"
 
 const stdioFdCount = 3
-
-// TODO: just a mock while it is not reading from the spec
-var gConf = config{
-	Name:           "box1",
-	Hostname:       "box1hostname",
-	RootFs:         "/home/cpr3t4s/Workspace/lws/repo/fs",
-	EntryPoint:     "/bin/sleep",
-	EntryPointArgs: []string{"10"},
-}
 
 const (
 	StateCreating = iota
@@ -35,7 +28,7 @@ const (
 )
 
 type boxRuntime struct {
-	root         string
+	workdir      string
 	childProcess process
 }
 
@@ -60,14 +53,25 @@ type Runtimer interface {
 	//Exec() (err error)
 }
 
-func New(root string) Runtimer {
+func New(name, workdir string, spec *spec.Spec) Runtimer {
+	hostname := spec.Hostname
+	if hostname == "" {
+		hostname = name
+	}
+
 	p := process{
-		state:  StateCreating,
-		config: gConf,
+		state: StateCreating,
+		config: config{
+			Name:           name,
+			Hostname:       hostname,
+			RootFs:         spec.Root.Path,
+			EntryPoint:     spec.Process.Args[0],
+			EntryPointArgs: append(spec.Process.Args[:0:0], spec.Process.Args...)[1:],
+		},
 	}
 
 	return &boxRuntime{
-		root:         root,
+		workdir:      workdir,
 		childProcess: p,
 	}
 }
@@ -75,7 +79,7 @@ func New(root string) Runtimer {
 func (b *boxRuntime) Create() (err error) {
 	log.Debugf("Creating Box %v \n", b.childProcess.config.Name)
 
-	dir := path.Join(b.root, b.childProcess.config.Name)
+	dir := path.Join(b.workdir, b.childProcess.config.Name)
 	err = os.MkdirAll(dir, 0766)
 	if err != nil {
 		err = fmt.Errorf("while creating dir %q: %s", dir, err)
@@ -100,7 +104,7 @@ func (b *boxRuntime) Create() (err error) {
 }
 
 func (b *boxRuntime) createExecFifo() error {
-	fifoName := filepath.Join(b.root, b.childProcess.config.Name, execFifoFilename)
+	fifoName := filepath.Join(b.workdir, b.childProcess.config.Name, execFifoFilename)
 	if _, err := os.Stat(fifoName); err == nil {
 		return fmt.Errorf("exec fifo %s already exists", fifoName)
 	}
@@ -117,7 +121,7 @@ func (b *boxRuntime) createExecFifo() error {
 }
 
 func (b *boxRuntime) deleteExecFifo() {
-	fifoName := filepath.Join(b.root, b.childProcess.config.Name, execFifoFilename)
+	fifoName := filepath.Join(b.workdir, b.childProcess.config.Name, execFifoFilename)
 	os.Remove(fifoName)
 }
 
@@ -126,7 +130,7 @@ func (b *boxRuntime) deleteExecFifo() {
 // un-opened). It then adds the FifoFd to the given exec.Cmd as an inherited
 // fd, with BOX_FIFO_FD set to its fd number.
 func (b *boxRuntime) includeExecFifo(cmd *exec.Cmd) error {
-	fifoName := filepath.Join(b.root, b.childProcess.config.Name, execFifoFilename)
+	fifoName := filepath.Join(b.workdir, b.childProcess.config.Name, execFifoFilename)
 	fifoFd, err := unix.Open(fifoName, unix.O_PATH|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err

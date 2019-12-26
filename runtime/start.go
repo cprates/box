@@ -19,7 +19,7 @@ func (b *boxRuntime) Start(pid int) error {
 
 	b.childProcess = process{
 		pid:    pid,
-		config: gConf,
+		config: b.childProcess.config,
 	}
 
 	return b.exec()

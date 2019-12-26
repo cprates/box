@@ -13,7 +13,7 @@ import (
 )
 
 func (b *boxRuntime) exec() error {
-	path := filepath.Join(b.root, b.childProcess.config.Name, execFifoFilename)
+	path := filepath.Join(b.workdir, b.childProcess.config.Name, execFifoFilename)
 
 	fifoOpen := make(chan struct{})
 	select {
