@@ -92,8 +92,9 @@ func (b *boxRuntime) start() (err error) {
 	b.childProcess.pid = cmd.Process.Pid
 	b.childProcess.created = true
 	b.state = state{
-		BoxPID:  b.childProcess.pid,
-		Created: b.childProcess.created,
+		BoxPID:        b.childProcess.pid,
+		Created:       b.childProcess.created,
+		ProcessConfig: b.childProcess.config,
 	}
 
 	stat, err := system.Stat(cmd.Process.Pid)

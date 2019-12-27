@@ -68,6 +68,30 @@ func New(name, workdir string, io ProcessIO, spec *spec.Spec) Runtimer {
 	}
 }
 
+func FromName(name, workdir string, io ProcessIO) (Runtimer, error) {
+	b := &boxRuntime{
+		workdir: workdir,
+	}
+
+	err := b.loadStateFromName(name)
+	if err != nil {
+		return nil, err
+	}
+
+	b.childProcess = process{
+		config: config{
+			Name:           b.state.ProcessConfig.Name,
+			Hostname:       b.state.ProcessConfig.Hostname,
+			RootFs:         b.state.ProcessConfig.RootFs,
+			EntryPoint:     b.state.ProcessConfig.EntryPoint,
+			EntryPointArgs: b.state.ProcessConfig.EntryPointArgs,
+		},
+		io: io,
+	}
+
+	return b, nil
+}
+
 func (b *boxRuntime) Create() (err error) {
 	log.Debugf("Creating Box %v \n", b.childProcess.config.Name)
 

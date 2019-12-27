@@ -14,8 +14,8 @@ const (
 	idxAction
 )
 
-// go build ./main.go  && sudo ./main create
-// go build ./main.go  && sudo ./main start
+// go build ./main.go && sudo ./main create box1
+// go build ./main.go && sudo ./main start box1
 func main() {
 
 	log.Infof("Running %+v", os.Args)
@@ -35,28 +35,22 @@ func main() {
 			Out: os.Stdout,
 			Err: os.Stderr,
 		}
-		r := runtime.New("box1", wd, io, config)
+		r := runtime.New(os.Args[2], wd, io, config)
 		if err := r.Create(); err != nil {
 			log.Error("Failed to create box:", err)
 			os.Exit(-1)
 		}
 	case "start":
-		// TODO: start should only need the container ID.. All the needed config should be stored
-		//  in the state file
-		config, err := spec.Load("config.json")
-		if err != nil {
-			log.Fatalln("Failed to load spec:", err)
-		}
-
 		wd, _ := os.Getwd()
 		io := runtime.ProcessIO{
 			In:  os.Stdin,
 			Out: os.Stdout,
 			Err: os.Stderr,
 		}
-		r := runtime.New("box1", wd, io, config)
+
+		r, err := runtime.FromName(os.Args[2], wd, io)
 		if err != nil {
-			log.Error("Failed to start box:", err)
+			log.Fatalln("Failed to load box:", err)
 		}
 		if err := r.Start(); err != nil {
 			log.Error("Failed to start box:", err)
