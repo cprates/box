@@ -17,22 +17,16 @@ const execFifoFilename = "exec.fifo"
 
 const stdioFdCount = 3
 
-const (
-	StateCreating = iota
-	StateCreated
-	StateRunning
-	StateStopped
-)
-
 type boxRuntime struct {
 	workdir      string
+	state        state
 	childProcess process
 }
 
 type process struct {
-	state  int
-	pid    int
-	config config
+	created bool
+	pid     int
+	config  config
 }
 
 type config struct {
@@ -45,7 +39,7 @@ type config struct {
 
 type Runtimer interface {
 	Create() (err error)
-	Start(pid int) (err error)
+	Start() (err error)
 	//Run() (err error)
 	//Exec() (err error)
 }
@@ -57,7 +51,6 @@ func New(name, workdir string, spec *spec.Spec) Runtimer {
 	}
 
 	p := process{
-		state: StateCreating,
 		config: config{
 			Name:           name,
 			Hostname:       hostname,

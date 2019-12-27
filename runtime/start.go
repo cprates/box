@@ -2,16 +2,21 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
 	"syscall"
-
-	log "github.com/sirupsen/logrus"
+	"time"
 )
 
-func (b *boxRuntime) Start(pid int) error {
+func (b *boxRuntime) Start() error {
+	err := b.loadState()
+	if err != nil {
+		return err
+	}
+
 	// TODO: currently there is no way to know if the child process has died for sure.
 	//  runC uses the start time of the process to make sure it is the right process
 	//  but for now I'm not storing the box state yet
@@ -29,7 +34,7 @@ func (b *boxRuntime) Start(pid int) error {
 	// TODO: must be thread safe
 
 	b.childProcess = process{
-		pid:    pid,
+		pid:    b.state.BoxPID,
 		config: b.childProcess.config,
 	}
 
@@ -86,10 +91,39 @@ func (b *boxRuntime) start() (err error) {
 	}
 
 	b.childProcess.pid = cmd.Process.Pid
-	b.childProcess.state = StateCreated
+	b.childProcess.created = true
+	b.state = state{
+		BoxPID:  b.childProcess.pid,
+		Created: b.childProcess.created,
+	}
 
-	// TODO: delete after storing this in a state file
-	log.Printf("Box instance PID:::::: %d\n\n", cmd.Process.Pid)
+	err = b.saveState()
+	if err == nil {
+		return
+	}
+
+	// we were unable to save the box's state so, kill the brand new child process
+
+	if err = cmd.Process.Kill(); err != nil {
+		err = fmt.Errorf("while killing child process: %s", err)
+		return
+	}
+
+	c := make(chan error)
+	go func() {
+		c <- cmd.Wait()
+	}()
+
+	select {
+	case err = <-c:
+		if err != nil {
+			err = fmt.Errorf("while waiting for child process to die: %s", err)
+			return
+		}
+	case <-time.After(500 * time.Millisecond):
+		err = errors.New("child process didn't return in time after being killed")
+		return
+	}
 
 	// TODO
 	//go func() {

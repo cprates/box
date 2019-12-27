@@ -2,7 +2,6 @@ package main
 
 import (
 	goos "os"
-	"strconv"
 
 	log "github.com/sirupsen/logrus"
 
@@ -16,7 +15,7 @@ const (
 )
 
 // go build ./main.go  && sudo ./main create
-// go build ./main.go  && sudo ./main start {PID}
+// go build ./main.go  && sudo ./main start
 func main() {
 
 	log.Infof("Running %+v", goos.Args)
@@ -44,11 +43,10 @@ func main() {
 
 		wd, _ := goos.Getwd()
 		r := runtime.New("box1", wd, config)
-		pid, err := strconv.Atoi(goos.Args[2])
 		if err != nil {
 			log.Error("Failed to start box:", err)
 		}
-		if err := r.Start(pid); err != nil {
+		if err := r.Start(); err != nil {
 			log.Error("Failed to start box:", err)
 			goos.Exit(-1)
 		}
