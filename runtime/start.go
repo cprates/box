@@ -43,10 +43,9 @@ func (b *boxRuntime) Start() error {
 
 func (b *boxRuntime) start() (err error) {
 	cmd := exec.Command("/proc/self/exe", "bootstrap")
-	// TODO: set IO correctly
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdin = b.childProcess.io.In
+	cmd.Stdout = b.childProcess.io.Out
+	cmd.Stderr = b.childProcess.io.Err
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS |
 			syscall.CLONE_NEWPID |
@@ -70,7 +69,7 @@ func (b *boxRuntime) start() (err error) {
 
 	cmd.Env = []string{
 		"BOX_BOOTSTRAP_CONFIG_FD=" + strconv.Itoa(configFd),
-		"BOX_BOOTSTRAP_LOG_FD=" + strconv.Itoa(int(os.Stdout.Fd())), // TODO: handle logging properly
+		"BOX_BOOTSTRAP_LOG_FD=" + strconv.Itoa(int(b.childProcess.io.Out.Fd())),
 		"BOX_DEBUG=" + os.Getenv("BOX_DEBUG"),
 	}
 

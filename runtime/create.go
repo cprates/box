@@ -27,6 +27,7 @@ type process struct {
 	created bool
 	pid     int
 	config  config
+	io      ProcessIO
 }
 
 type config struct {
@@ -44,7 +45,7 @@ type Runtimer interface {
 	//Exec() (err error)
 }
 
-func New(name, workdir string, spec *spec.Spec) Runtimer {
+func New(name, workdir string, io ProcessIO, spec *spec.Spec) Runtimer {
 	hostname := spec.Hostname
 	if hostname == "" {
 		hostname = name
@@ -58,6 +59,7 @@ func New(name, workdir string, spec *spec.Spec) Runtimer {
 			EntryPoint:     spec.Process.Args[0],
 			EntryPointArgs: append(spec.Process.Args[:0:0], spec.Process.Args...)[1:],
 		},
+		io: io,
 	}
 
 	return &boxRuntime{
