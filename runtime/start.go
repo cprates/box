@@ -9,29 +9,29 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/cprates/box/system"
 )
 
 func (b *boxRuntime) Start() error {
+	// TODO: must be thread safe
+
 	err := b.loadState()
 	if err != nil {
 		return err
 	}
 
-	// TODO: currently there is no way to know if the child process has died for sure.
-	//  runC uses the start time of the process to make sure it is the right process
-	//  but for now I'm not storing the box state yet
 	// first check if the waiting child is still alive
-	//stat, err := system.Stat(pid)
-	//if err != nil {
-	//	return fmt.Errorf("container is stopped")
-	//}
-	//if stat.StartTime != c.initProcessStartTime ||
-	//	stat.State == system.Zombie ||
-	//	stat.State == system.Dead {
-	//	return fmt.Errorf("container is stopped")
-	//}
+	stat, err := system.Stat(b.state.BoxPID)
+	if err != nil {
+		return fmt.Errorf("box is stopped")
+	}
 
-	// TODO: must be thread safe
+	if stat.StartTime != b.state.ProcessStartClockTicks ||
+		stat.State == system.Zombie ||
+		stat.State == system.Dead {
+		return fmt.Errorf("box is stopped")
+	}
 
 	b.childProcess = process{
 		pid:    b.state.BoxPID,
@@ -97,9 +97,13 @@ func (b *boxRuntime) start() (err error) {
 		Created: b.childProcess.created,
 	}
 
-	err = b.saveState()
+	stat, err := system.Stat(cmd.Process.Pid)
 	if err == nil {
-		return
+		b.state.ProcessStartClockTicks = stat.StartTime
+		err = b.saveState()
+		if err == nil {
+			return
+		}
 	}
 
 	// we were unable to save the box's state so, kill the brand new child process

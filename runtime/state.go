@@ -9,11 +9,12 @@ import (
 const stateFilename = "state.json"
 
 type state struct {
-	BoxPID  int
-	Created bool
+	BoxPID                 int
+	Created                bool
+	ProcessStartClockTicks uint64
 }
 
-func (r boxRuntime) saveState() (err error) {
+func (r *boxRuntime) saveState() (err error) {
 	f, err := os.Create(filepath.Join(r.workdir, r.childProcess.config.Name, stateFilename))
 	if err != nil {
 		return
@@ -21,11 +22,10 @@ func (r boxRuntime) saveState() (err error) {
 	defer f.Close()
 
 	err = json.NewEncoder(f).Encode(r.state)
-
 	return
 }
 
-func (r boxRuntime) loadState() (err error) {
+func (r *boxRuntime) loadState() (err error) {
 	f, err := os.Open(filepath.Join(r.workdir, r.childProcess.config.Name, stateFilename))
 	if err != nil {
 		return
