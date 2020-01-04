@@ -6,7 +6,7 @@ Example spec file:
   "ociVersion": "1.0.1",
 
   "root": {
-    "path": "/home/cpr3t4s/Workspace/lws/repo/fs"
+    "path": "/home/dir/Workspace/lws/repo/fs"
   },
 
   "hostname": "box1hostname",
