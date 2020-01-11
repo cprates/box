@@ -19,9 +19,34 @@ func must(err error) {
 	}
 }
 
-func setupEnv(conf *config) {
-	must(syscall.Sethostname([]byte(conf.Hostname)))
-	must(syscall.Mount("proc", path.Join(conf.RootFs, "proc"), "proc", 0, ""))
+func setupEnv(conf *config) (err error) {
+	// doing the mounts like this makes the code extremely repetitive. The right thing to do for
+	// mounts would be get the mount points from the spec, but for now I want to make the steps
+	// clear
+	var flags uintptr
+	if err = mount("proc", "/proc", "proc", conf.RootFs, 0, ""); err != nil {
+		return
+	}
+	if err = mount("tmpfs", "/tmp", "tmpfs", conf.RootFs, 0, ""); err != nil {
+		return
+	}
+	flags = unix.MS_NOSUID
+	if err = mount("tmpfs", "/dev", "tmpfs", conf.RootFs, flags, "mode=755"); err != nil {
+		return
+	}
+	flags = unix.MS_NOSUID | unix.MS_RDONLY | unix.MS_NODEV | unix.MS_NOEXEC
+	if err = mount("sysfs", "/sys", "sysfs", conf.RootFs, flags, ""); err != nil {
+		return
+	}
+	flags = unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC
+	if err = mount("mqueue", "/dev/mqueue", "mqueue", conf.RootFs, flags, ""); err != nil {
+		return
+	}
+
+	if err = syscall.Sethostname([]byte(conf.Hostname)); err != nil {
+		return
+	}
+
 	if err := syscall.Mknod(path.Join(conf.RootFs, "/dev/null"), 1, 3); err != nil {
 		if !os.IsExist(err) {
 			must(err)
@@ -29,11 +54,13 @@ func setupEnv(conf *config) {
 	}
 	must(syscall.Chroot(conf.RootFs))
 	must(os.Chdir("/"))
+
+	return
 }
 
 func cleanup() {
-	//must(goos.Remove("/dev/null"))
-	must(syscall.Unmount("/proc", 0))
+	//must(os.Remove("/dev/null"))
+	//must(syscall.Unmount("/proc", 0))
 }
 
 func pipe(sFd, name string) (f *os.File, err error) {
@@ -53,6 +80,7 @@ func pipe(sFd, name string) (f *os.File, err error) {
 	return
 }
 
+// TODO: failures must be properly handled while bootstrapping
 func Bootstrap(configFd, logFd string) (err error) {
 
 	logPipe, err := pipe(logFd, "logPipe")
@@ -82,7 +110,12 @@ func Bootstrap(configFd, logFd string) (err error) {
 		return
 	}
 
-	setupEnv(&conf)
+	err = setupEnv(&conf)
+	if err != nil {
+		err = fmt.Errorf("unable to setup environment: %s", err)
+		log.Error(err)
+		return
+	}
 	defer func() {
 		cleanup()
 	}()
@@ -93,6 +126,7 @@ func Bootstrap(configFd, logFd string) (err error) {
 	if err != nil {
 		err = fmt.Errorf("unable to get fifo fd: %s", err)
 		log.Error(err)
+		return
 	}
 
 	fd, err := unix.Open(fmt.Sprintf("/proc/self/fd/%d", fifoFd), unix.O_WRONLY|unix.O_CLOEXEC, 0)
