@@ -8,6 +8,7 @@ import (
 	"github.com/cprates/box/spec"
 )
 
+// Cartoner defines the interface through which we can manage Boxes.
 type Cartoner interface {
 	CreateBox(name string, io ProcessIO, spec *spec.Spec) (box Boxer, err error)
 	LoadBox(name string, io ProcessIO) (box Boxer, err error)
@@ -24,13 +25,16 @@ const stdioFdCount = 3
 
 var _ Cartoner = (*carton)(nil)
 
+// New returns a new ready to use Boxes manager which will use the given workdir to store and load
+// Boxes. The given workdir should be an absolute path.
 func New(workdir string) Cartoner {
 	return &carton{
 		workdir: workdir,
 	}
 }
 
-// TODO: doc. io doesn't seem to belong here... Should come from the state file.
+// LoadBox loads an existing box with the given name from the configured workdir.
+// TODO: io doesn't seem to belong here... Should come from the state file.
 func (c *carton) LoadBox(name string, io ProcessIO) (box Boxer, err error) {
 	state, err := c.loadStateFromName(name)
 	if err != nil {
@@ -55,7 +59,8 @@ func (c *carton) LoadBox(name string, io ProcessIO) (box Boxer, err error) {
 	return
 }
 
-// TODO: doc.
+// CreateBox creates a new Box with the given name and spec, which will use the given io
+// to communicate with the exterior world. The name must be unique for each workdir.
 func (c *carton) CreateBox(name string, io ProcessIO, spec *spec.Spec) (box Boxer, err error) {
 	boxDir := path.Join(c.workdir, name)
 	err = os.MkdirAll(boxDir, 0766)

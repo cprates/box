@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// Valid validates a spec, returning an error if it is not valid.
 func (s Spec) Valid() error {
 	verErr := errors.New("spec version not supported")
 	v := strings.Split(s.Version, ".")
@@ -30,6 +31,7 @@ func (s Spec) Valid() error {
 	return nil
 }
 
+// Valid validates the app spec running inside the box, returning an error if it is not valid.
 func (p Process) Valid() error {
 	if p.Cwd == "" {
 		return errors.New("cwd property must not be empty")
@@ -44,6 +46,7 @@ func (p Process) Valid() error {
 	return nil
 }
 
+// Valid validates the container's root filesystem, returning an error if it is not valid.
 func (r Root) Valid() error {
 	if r.Readonly {
 		return errors.New("read-only root not supported")

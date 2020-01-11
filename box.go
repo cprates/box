@@ -19,9 +19,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// Boxer defines the interface to interact with a Box.
 type Boxer interface {
+	// Creates a new box with the given mame and spec, storing the state in workdir, using the
+	// given io channels to communicate with the outside world
 	create(name, workdir string, io ProcessIO, spec *spec.Spec) (err error)
-
+	// Starts an existing Box returning immediately after the Box is running
 	Start() (err error)
 	//Run() (err error)
 	//Exec() (err error)
@@ -96,7 +99,7 @@ func (c *cartonBox) create(name, workdir string, io ProcessIO, spec *spec.Spec) 
 	return
 }
 
-// TODO: doc.
+// Start a previously create Box, returning immediately after the box is started.
 func (c *cartonBox) Start() error {
 	// TODO: must be thread safe
 
