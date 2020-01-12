@@ -28,6 +28,10 @@ func setupEnv(conf *config) (err error) {
 		return
 	}
 
+	if err = createDevSymlinks(conf.RootFs); err != nil {
+		return
+	}
+
 	if err = syscall.Sethostname([]byte(conf.Hostname)); err != nil {
 		return
 	}

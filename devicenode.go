@@ -87,3 +87,28 @@ func createDeviceNode(
 
 	return unix.Chown(absPath, uid, gid)
 }
+
+// copied from runc
+func createDevSymlinks(rootFs string) (err error) {
+	var links = [][2]string{
+		{"/proc/self/fd", "/dev/fd"},
+		{"/proc/self/fd/0", "/dev/stdin"},
+		{"/proc/self/fd/1", "/dev/stdout"},
+		{"/proc/self/fd/2", "/dev/stderr"},
+	}
+	// kcore support can be toggled with CONFIG_PROC_KCORE; only create a symlink
+	// in /dev if it exists in /proc.
+	if _, err := os.Stat("/proc/kcore"); err == nil {
+		links = append(links, [2]string{"/proc/kcore", "/dev/core"})
+	}
+	for _, link := range links {
+		var (
+			src = link[0]
+			dst = filepath.Join(rootFs, link[1])
+		)
+		if err := os.Symlink(src, dst); err != nil && !os.IsExist(err) {
+			return fmt.Errorf("creating symlink %s %s %s", src, dst, err)
+		}
+	}
+	return nil
+}
