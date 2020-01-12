@@ -20,26 +20,7 @@ func must(err error) {
 }
 
 func setupEnv(conf *config) (err error) {
-	// doing the mounts like this makes the code extremely repetitive. The right thing to do for
-	// mounts would be get the mount points from the spec, but for now I want to make the steps
-	// clear
-	var flags uintptr
-	if err = mount("proc", "/proc", "proc", conf.RootFs, 0, ""); err != nil {
-		return
-	}
-	if err = mount("tmpfs", "/tmp", "tmpfs", conf.RootFs, 0, ""); err != nil {
-		return
-	}
-	flags = unix.MS_NOSUID
-	if err = mount("tmpfs", "/dev", "tmpfs", conf.RootFs, flags, "mode=755"); err != nil {
-		return
-	}
-	flags = unix.MS_NOSUID | unix.MS_RDONLY | unix.MS_NODEV | unix.MS_NOEXEC
-	if err = mount("sysfs", "/sys", "sysfs", conf.RootFs, flags, ""); err != nil {
-		return
-	}
-	flags = unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC
-	if err = mount("mqueue", "/dev/mqueue", "mqueue", conf.RootFs, flags, ""); err != nil {
+	if err = mountPoints(conf.RootFs); err != nil {
 		return
 	}
 
