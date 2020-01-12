@@ -32,8 +32,8 @@ func setupEnv(conf *config) (err error) {
 		return
 	}
 
-	if err = syscall.Sethostname([]byte(conf.Hostname)); err != nil {
-		return
+	if err = setHostname(conf.Hostname, path.Join(conf.RootFs, "/etc/hostname")); err != nil {
+		return fmt.Errorf("setting hostname: %s", err)
 	}
 
 	if err := syscall.Mknod(path.Join(conf.RootFs, "/dev/null"), 1, 3); err != nil {
@@ -43,6 +43,29 @@ func setupEnv(conf *config) (err error) {
 	}
 	must(syscall.Chroot(conf.RootFs))
 	must(os.Chdir("/"))
+
+	return
+}
+
+func setHostname(hostname, path string) (err error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0665)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	n, err := fmt.Fprintln(f, hostname)
+	if err != nil {
+		return
+	}
+	if n != len(hostname)+1 {
+		err = fmt.Errorf("unfinished write to file, got %d expect %d", n, len(hostname))
+		return
+	}
+
+	if err = syscall.Sethostname([]byte(hostname)); err != nil {
+		return
+	}
 
 	return
 }
