@@ -24,6 +24,10 @@ func setupEnv(conf *config) (err error) {
 		return
 	}
 
+	if err = createDeviceNodes(conf.RootFs); err != nil {
+		return
+	}
+
 	if err = syscall.Sethostname([]byte(conf.Hostname)); err != nil {
 		return
 	}

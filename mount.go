@@ -48,8 +48,8 @@ func mountPoints(rootFs string) (err error) {
 	return
 }
 
-func mount(source, target, fsType, fsPath string, flags uintptr, data string) (err error) {
-	at := path.Join(fsPath, target)
+func mount(source, target, fsType, rootFs string, flags uintptr, data string) (err error) {
+	at := path.Join(rootFs, target)
 
 	if err = os.MkdirAll(at, 0755); err != nil {
 		err = fmt.Errorf("creating dir %q: %s", at, err)
