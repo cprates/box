@@ -57,6 +57,23 @@ func main() {
 		if err := box.Start(); err != nil {
 			log.Fatalln("Failed to start box:", err)
 		}
+	case "run":
+		spec, err := spec.Load("config.json")
+		if err != nil {
+			log.Fatalln("Failed to load spec:", err)
+		}
+
+		wd, _ := os.Getwd()
+		io := ProcessIO{
+			In:  os.Stdin,
+			Out: os.Stdout,
+			Err: os.Stderr,
+		}
+
+		c := New(wd)
+		if err := c.RunBox(os.Args[2], io, spec); err != nil {
+			log.Fatalln("Failed to run box:", err)
+		}
 	case "bootstrap":
 		log.Println("Bootstrapping box...")
 		if err := Bootstrap(

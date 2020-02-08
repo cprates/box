@@ -26,8 +26,9 @@ type Boxer interface {
 	create(name, workdir string, io ProcessIO, spec *spec.Spec) (err error)
 	// Starts an existing Box returning immediately after the Box is running
 	Start() (err error)
-	//Run() (err error)
-	//Exec() (err error)
+	// Run creates and starts a new box with name at workdir with the given spec, blocking until
+	// the box is terminated.
+	Run(name, workdir string, io ProcessIO, spec *spec.Spec) (err error)
 }
 
 type cartonBox struct {
@@ -40,6 +41,13 @@ type process struct {
 	created bool
 	pid     int
 	io      ProcessIO
+}
+
+// ProcessIO is used to pass to the runtime the communication channels.
+type ProcessIO struct {
+	In  *os.File
+	Out *os.File
+	Err *os.File
 }
 
 type config struct {
@@ -63,18 +71,21 @@ func newCartonBox() Boxer {
 	return &cartonBox{}
 }
 
-// here the workdir is from the box's point of view
-func (c *cartonBox) create(name, workdir string, io ProcessIO, spec *spec.Spec) (err error) {
+func boxHostname(name, hostname string) string {
 	// the hostname in the spec is optional so, if it isn't set, set it to the given name
-	hostname := spec.Hostname
-	if hostname == "" {
-		hostname = name
+	if hostname != "" {
+		return hostname
 	}
 
+	return name
+}
+
+// here the workdir is from the box's point of view
+func (c *cartonBox) create(name, workdir string, io ProcessIO, spec *spec.Spec) (err error) {
 	c.childProcess = process{io: io}
 	c.config = config{
 		Name:           name,
-		Hostname:       hostname,
+		Hostname:       boxHostname(name, spec.Hostname),
 		RootFs:         spec.Root.Path,
 		EntryPoint:     spec.Process.Args[0],
 		EntryPointArgs: append(spec.Process.Args[:0:0], spec.Process.Args...)[1:],
@@ -93,6 +104,35 @@ func (c *cartonBox) create(name, workdir string, io ProcessIO, spec *spec.Spec) 
 	if err != nil {
 		c.deleteExecFifo()
 		err = fmt.Errorf("creating container: %s", err)
+		return
+	}
+
+	return
+}
+
+// Run creates and starts a new box with name at workdir with the given spec, blocking until
+// the box is terminated.
+func (c *cartonBox) Run(name, workdir string, io ProcessIO, spec *spec.Spec) (err error) {
+	c.childProcess = process{io: io}
+	c.config = config{
+		Name:           name,
+		Hostname:       boxHostname(name, spec.Hostname),
+		RootFs:         spec.Root.Path,
+		EntryPoint:     spec.Process.Args[0],
+		EntryPointArgs: append(spec.Process.Args[:0:0], spec.Process.Args...)[1:],
+		StateFilePath:  filepath.Join(workdir, stateFilename),
+	}
+
+	err = c.start()
+	if err != nil {
+		return
+	}
+
+	<-awaitProcessExit(c.childProcess.pid, make(chan struct{}))
+
+	err = os.RemoveAll(workdir)
+	if err != nil {
+		err = fmt.Errorf("cleaning up workdir: %s", err)
 		return
 	}
 
@@ -186,9 +226,10 @@ func (c *cartonBox) start() (err error) {
 	}
 
 	// we were unable to save the box's state so, kill the brand new child process
+	err = fmt.Errorf("unable to save state: %s", err)
 
-	if err = cmd.Process.Kill(); err != nil {
-		err = fmt.Errorf("while killing child process: %s", err)
+	if e := cmd.Process.Kill(); e != nil {
+		e = fmt.Errorf("%s, also failed to kill child process: %s", err, e)
 		return
 	}
 
@@ -198,13 +239,13 @@ func (c *cartonBox) start() (err error) {
 	}()
 
 	select {
-	case err = <-errC:
-		if err != nil {
-			err = fmt.Errorf("while waiting for child process to die: %s", err)
+	case e := <-errC:
+		if e != nil {
+			e = fmt.Errorf("%s, also failed while waiting for child process to die: %s", err, e)
 			return
 		}
 	case <-time.After(500 * time.Millisecond):
-		err = errors.New("child process didn't return in time after being killed")
+		err = fmt.Errorf("%s, also child process didn't return in time after being killed", err)
 		return
 	}
 
@@ -265,6 +306,10 @@ func (c *cartonBox) deleteExecFifo() {
 // un-opened). It then adds the FifoFd to the given exec.Cmd as an inherited
 // fd, with BOX_FIFO_FD set to its fd number.
 func (c *cartonBox) includeExecFifo(cmd *exec.Cmd) error {
+	if c.config.ExecFifoPath == "" {
+		return nil
+	}
+
 	fifoFd, err := unix.Open(c.config.ExecFifoPath, unix.O_PATH|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err

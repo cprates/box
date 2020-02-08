@@ -11,6 +11,7 @@ import (
 // Cartoner defines the interface through which we can manage Boxes.
 type Cartoner interface {
 	CreateBox(name string, io ProcessIO, spec *spec.Spec) (box Boxer, err error)
+	RunBox(name string, io ProcessIO, spec *spec.Spec) (err error)
 	LoadBox(name string, io ProcessIO) (box Boxer, err error)
 	//DestroyBox() (err error)
 }
@@ -77,5 +78,25 @@ func (c *carton) CreateBox(name string, io ProcessIO, spec *spec.Spec) (box Boxe
 	}
 
 	box = b
+	return
+}
+
+// RunBox creates and starts a new box with name and io with the given spec, blocking until
+// the box is terminated.
+func (c *carton) RunBox(name string, io ProcessIO, spec *spec.Spec) (err error) {
+	boxDir := path.Join(c.workdir, name)
+	err = os.MkdirAll(boxDir, 0766)
+	if err != nil {
+		err = fmt.Errorf("box: while creating dir %q: %s", boxDir, err)
+		return
+	}
+
+	b := newCartonBox()
+	err = b.Run(name, boxDir, io, spec)
+	if err != nil {
+		err = fmt.Errorf("box: while creating box %q: %s", boxDir, err)
+		return
+	}
+
 	return
 }

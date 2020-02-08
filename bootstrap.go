@@ -32,6 +32,8 @@ func setupEnv(conf *config) (err error) {
 		return
 	}
 
+	// TODO
+	//  https://github.com/opencontainers/runc/blob/master/libcontainer/SPEC.md#runtime-and-init-process
 	if err = setHostname(conf.Hostname, path.Join(conf.RootFs, "/etc/hostname")); err != nil {
 		return fmt.Errorf("setting hostname: %s", err)
 	}
@@ -41,6 +43,9 @@ func setupEnv(conf *config) (err error) {
 			must(err)
 		}
 	}
+
+	// TODO: os.Clearenv() and set the bare minimum env vars
+
 	must(syscall.Chroot(conf.RootFs))
 	must(os.Chdir("/"))
 
@@ -134,6 +139,24 @@ func Bootstrap(configFd, logFd string) (err error) {
 
 	log.Debugf("Bootstrapping box %s: %s %v \n", conf.Name, conf.EntryPoint, conf.EntryPointArgs)
 
+	boxFifoFd := os.Getenv("BOX_FIFO_FD")
+	if boxFifoFd != "" {
+		if err = syncParent(); err != nil {
+			return
+		}
+	}
+
+	err = syscall.Exec(
+		conf.EntryPoint,
+		append([]string{path.Base(conf.EntryPoint)}, conf.EntryPointArgs...),
+		os.Environ(),
+	)
+	log.Errorf("bootstrap: executing entry point: %s", err)
+
+	return
+}
+
+func syncParent() (err error) {
 	fifoFd, err := strconv.Atoi(os.Getenv("BOX_FIFO_FD"))
 	if err != nil {
 		err = fmt.Errorf("unable to get fifo fd: %s", err)
@@ -155,13 +178,5 @@ func Bootstrap(configFd, logFd string) (err error) {
 	}
 
 	_ = unix.Close(fifoFd)
-
-	err = syscall.Exec(
-		conf.EntryPoint,
-		append([]string{path.Base(conf.EntryPoint)}, conf.EntryPointArgs...),
-		os.Environ(),
-	)
-	log.Errorf("bootstrap: executing entry point: %s", err)
-
 	return
 }
