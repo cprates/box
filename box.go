@@ -54,8 +54,10 @@ type config struct {
 	Name           string
 	Hostname       string
 	RootFs         string
+	Cwd            string
 	EntryPoint     string
 	EntryPointArgs []string // entryPoint args
+	EnvVars        []string
 	ExecFifoPath   string
 	StateFilePath  string
 }
@@ -80,6 +82,14 @@ func boxHostname(name, hostname string) string {
 	return name
 }
 
+func boxCwd(specCwd string) string {
+	if specCwd != "" {
+		return specCwd
+	}
+
+	return "/"
+}
+
 // here the workdir is from the box's point of view
 func (c *cartonBox) create(name, workdir string, io ProcessIO, spec *spec.Spec) (err error) {
 	c.childProcess = process{io: io}
@@ -87,8 +97,10 @@ func (c *cartonBox) create(name, workdir string, io ProcessIO, spec *spec.Spec) 
 		Name:           name,
 		Hostname:       boxHostname(name, spec.Hostname),
 		RootFs:         spec.Root.Path,
+		Cwd:            boxCwd(spec.Process.Cwd),
 		EntryPoint:     spec.Process.Args[0],
 		EntryPointArgs: append(spec.Process.Args[:0:0], spec.Process.Args...)[1:],
+		EnvVars:        spec.Process.Env,
 		ExecFifoPath:   filepath.Join(workdir, execFifoFilename),
 		StateFilePath:  filepath.Join(workdir, stateFilename),
 	}
@@ -118,8 +130,10 @@ func (c *cartonBox) Run(name, workdir string, io ProcessIO, spec *spec.Spec) (er
 		Name:           name,
 		Hostname:       boxHostname(name, spec.Hostname),
 		RootFs:         spec.Root.Path,
+		Cwd:            boxCwd(spec.Process.Cwd),
 		EntryPoint:     spec.Process.Args[0],
 		EntryPointArgs: append(spec.Process.Args[:0:0], spec.Process.Args...)[1:],
+		EnvVars:        spec.Process.Env,
 		StateFilePath:  filepath.Join(workdir, stateFilename),
 	}
 

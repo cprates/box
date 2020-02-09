@@ -12,13 +12,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// TODO: delete
-func must(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
 func setupEnv(conf *config) (err error) {
 	if err = mountPoints(conf.RootFs); err != nil {
 		return
@@ -40,14 +33,27 @@ func setupEnv(conf *config) (err error) {
 
 	if err := syscall.Mknod(path.Join(conf.RootFs, "/dev/null"), 1, 3); err != nil {
 		if !os.IsExist(err) {
-			must(err)
+			return
 		}
+		err = nil
 	}
 
-	// TODO: os.Clearenv() and set the bare minimum env vars
+	if err = createDevSymlinks(conf.RootFs); err != nil {
+		return
+	}
 
-	must(syscall.Chroot(conf.RootFs))
-	must(os.Chdir("/"))
+	os.Clearenv()
+	if err = setEnvVars(conf.EnvVars); err != nil {
+		return
+	}
+
+	if err = syscall.Chroot(conf.RootFs); err != nil {
+		return
+	}
+
+	if err = os.Chdir(conf.Cwd); err != nil {
+		return
+	}
 
 	return
 }
@@ -127,6 +133,10 @@ func Bootstrap(configFd, logFd string) (err error) {
 		return
 	}
 
+	// capture the env var before setting up the env since all env vars are deleted
+	// in order to set up the box's env
+	fifoFd := os.Getenv("BOX_FIFO_FD")
+
 	err = setupEnv(&conf)
 	if err != nil {
 		err = fmt.Errorf("unable to setup environment: %s", err)
@@ -139,9 +149,15 @@ func Bootstrap(configFd, logFd string) (err error) {
 
 	log.Debugf("Bootstrapping box %s: %s %v \n", conf.Name, conf.EntryPoint, conf.EntryPointArgs)
 
-	boxFifoFd := os.Getenv("BOX_FIFO_FD")
-	if boxFifoFd != "" {
-		if err = syncParent(); err != nil {
+	if fifoFd != "" {
+		fd, e := strconv.Atoi(fifoFd)
+		if e != nil {
+			err = fmt.Errorf("unable to convert fifo fd: %s", e)
+			log.Error(err)
+			return
+		}
+
+		if err = syncParent(fd); err != nil {
 			return
 		}
 	}
@@ -156,14 +172,7 @@ func Bootstrap(configFd, logFd string) (err error) {
 	return
 }
 
-func syncParent() (err error) {
-	fifoFd, err := strconv.Atoi(os.Getenv("BOX_FIFO_FD"))
-	if err != nil {
-		err = fmt.Errorf("unable to get fifo fd: %s", err)
-		log.Error(err)
-		return
-	}
-
+func syncParent(fifoFd int) (err error) {
 	fd, err := unix.Open(fmt.Sprintf("/proc/self/fd/%d", fifoFd), unix.O_WRONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		err = fmt.Errorf("open exec fifo: %s", err)

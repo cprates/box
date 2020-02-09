@@ -24,19 +24,19 @@ Example spec file:
   "ociVersion": "1.0.1",
 
   "root": {
-    "path": "/home/dir/Workspace/lws/repo/fs"
+    "path": "/path/to/root/fs"
   },
 
-  "hostname": "box1hostname",
+  "hostname": "boxhostname",
 
   "process": {
-    "terminal": false,
     "args": [
       "/bin/ps", "aux"
     ],
     "env": [
       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-      "TERM=xterm"
+      "TERM=xterm",
+      "HOME=/root"
     ],
     "cwd": "/"
   }
