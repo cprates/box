@@ -24,15 +24,21 @@ type Config struct {
 	EntryPointArgs []string
 }
 
-func options(cfg Config) []Option {
-	return DefaultNodeDevs(cfg.RootFs)
+func options(cfg Config) (opts []Option) {
+	opts = append(
+		opts,
+		DefaultMounts(cfg.RootFs)...,
+	)
+
+	opts = append(
+		opts,
+		DefaultNodeDevs(cfg.RootFs)...,
+	)
+
+	return
 }
 
 func setupEnv(cfg Config) (err error) {
-	if err = mountPoints(cfg.RootFs); err != nil {
-		return
-	}
-
 	for _, opt := range options(cfg) {
 		if e := opt(); e != nil {
 			err = fmt.Errorf("unable to setup environment: %s", e)
