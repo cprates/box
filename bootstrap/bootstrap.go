@@ -12,6 +12,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+type Option func() error
+
 type Config struct {
 	Name           string
 	Hostname       string
@@ -22,13 +24,21 @@ type Config struct {
 	EntryPointArgs []string
 }
 
+func options(cfg Config) []Option {
+	return DefaultNodeDevs(cfg.RootFs)
+}
+
 func setupEnv(cfg Config) (err error) {
 	if err = mountPoints(cfg.RootFs); err != nil {
 		return
 	}
 
-	if err = createDeviceNodes(cfg.RootFs); err != nil {
-		return
+	for _, opt := range options(cfg) {
+		if e := opt(); e != nil {
+			err = fmt.Errorf("unable to setup environment: %s", e)
+			log.Error(err)
+			return
+		}
 	}
 
 	if err = createDevSymlinks(cfg.RootFs); err != nil {

@@ -8,44 +8,72 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func createDeviceNodes(rootFs string) (err error) {
-	// refs: https://github.com/opencontainers/runc/blob/master/libcontainer/SPEC.md#runtime-and-init-process
-	//       https://github.com/opencontainers/runtime-spec/blob/master/config-linux.md#devices
-	//       https://www.kernel.org/doc/Documentation/admin-guide/devices.txt
+// DefaultNodeDevs returns a list of the default device nodes for a container as specified at
+// https://github.com/opencontainers/runtime-spec/blob/master/config-linux.md#default-devices
+// other refs:
+//       https://github.com/opencontainers/runc/blob/master/libcontainer/SPEC.md#runtime-and-init-process
+//       https://github.com/opencontainers/runtime-spec/blob/master/config-linux.md#devices
+//       https://www.kernel.org/doc/Documentation/admin-guide/devices.txt
+func DefaultNodeDevs(rootFs string) []Option {
+	return []Option{
+		NullDev(rootFs),
+		ZeroDev(rootFs),
+		FullDev(rootFs),
+		RandomDev(rootFs),
+		URandomDev(rootFs),
+		TtyDev(rootFs),
+		PtmxDev(rootFs),
+	}
+}
 
-	// just as mount points, the right thing to do for would be get the devices from the spec,
-	// but for now I want to make the steps clear
+func NullDev(rootFs string) Option {
+	return func() error {
+		return createDeviceNode(1, 3, "/dev/null", 'c', 666, 0, 0, rootFs)
+	}
+}
 
-	if err = createDeviceNode(1, 3, "/dev/null", 'c', 666, 0, 0, rootFs); err != nil {
-		return
+func ZeroDev(rootFs string) Option {
+	return func() error {
+		return createDeviceNode(1, 5, "/dev/zero", 'c', 666, 0, 0, rootFs)
 	}
-	if err = createDeviceNode(1, 5, "/dev/zero", 'c', 666, 0, 0, rootFs); err != nil {
-		return
-	}
-	if err = createDeviceNode(1, 7, "/dev/full", 'c', 666, 0, 0, rootFs); err != nil {
-		return
-	}
-	if err = createDeviceNode(1, 8, "/dev/random", 'c', 666, 0, 0, rootFs); err != nil {
-		return
-	}
-	if err = createDeviceNode(1, 9, "/dev/urandom", 'c', 666, 0, 0, rootFs); err != nil {
-		return
-	}
-	if err = createDeviceNode(5, 0, "/dev/tty", 'c', 666, 0, 5, rootFs); err != nil {
-		return
-	}
+}
 
-	ptmx := filepath.Join(rootFs, "/dev/ptmx")
-	if err := os.Remove(ptmx); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("unable to remove existing symlink dev ptmx at %q: %s", ptmx, err)
+func FullDev(rootFs string) Option {
+	return func() error {
+		return createDeviceNode(1, 7, "/dev/full", 'c', 666, 0, 0, rootFs)
 	}
-	if err := os.Symlink("pts/ptmx", ptmx); err != nil {
-		return fmt.Errorf("creating symlink dev ptmx %s", err)
+}
+
+func RandomDev(rootFs string) Option {
+	return func() error {
+		return createDeviceNode(1, 8, "/dev/random", 'c', 666, 0, 0, rootFs)
 	}
+}
 
-	// TODO: lets leave console for later when we support terminal flag
+func URandomDev(rootFs string) Option {
+	return func() error {
+		return createDeviceNode(1, 9, "/dev/urandom", 'c', 666, 0, 0, rootFs)
+	}
+}
 
-	return
+func TtyDev(rootFs string) Option {
+	return func() error {
+		return createDeviceNode(5, 0, "/dev/tty", 'c', 666, 0, 5, rootFs)
+	}
+}
+
+func PtmxDev(rootFs string) Option {
+	return func() error {
+		ptmx := filepath.Join(rootFs, "/dev/ptmx")
+		if err := os.Remove(ptmx); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("unable to remove existing symlink dev ptmx at %q: %s", ptmx, err)
+		}
+		if err := os.Symlink("pts/ptmx", ptmx); err != nil {
+			return fmt.Errorf("creating symlink dev ptmx %s", err)
+		}
+
+		return nil
+	}
 }
 
 func createDeviceNode(
