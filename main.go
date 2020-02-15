@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/cprates/box/bootstrap"
 	"github.com/cprates/box/spec"
 
 	log "github.com/sirupsen/logrus"
@@ -76,7 +77,7 @@ func main() {
 		}
 	case "bootstrap":
 		log.Println("Bootstrapping box...")
-		if err := Bootstrap(
+		if err := bootstrap.Boot(
 			os.Getenv("BOX_BOOTSTRAP_CONFIG_FD"),
 			os.Getenv("BOX_BOOTSTRAP_LOG_FD"),
 		); err != nil {

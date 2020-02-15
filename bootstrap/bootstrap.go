@@ -1,4 +1,4 @@
-package main
+package bootstrap
 
 import (
 	"encoding/json"
@@ -12,46 +12,56 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func setupEnv(conf *config) (err error) {
-	if err = mountPoints(conf.RootFs); err != nil {
+type Config struct {
+	Name           string
+	Hostname       string
+	RootFs         string
+	EnvVars        []string
+	Cwd            string
+	EntryPoint     string
+	EntryPointArgs []string
+}
+
+func setupEnv(cfg Config) (err error) {
+	if err = mountPoints(cfg.RootFs); err != nil {
 		return
 	}
 
-	if err = createDeviceNodes(conf.RootFs); err != nil {
+	if err = createDeviceNodes(cfg.RootFs); err != nil {
 		return
 	}
 
-	if err = createDevSymlinks(conf.RootFs); err != nil {
+	if err = createDevSymlinks(cfg.RootFs); err != nil {
 		return
 	}
 
 	// TODO
 	//  https://github.com/opencontainers/runc/blob/master/libcontainer/SPEC.md#runtime-and-init-process
-	if err = setHostname(conf.Hostname, path.Join(conf.RootFs, "/etc/hostname")); err != nil {
+	if err = setHostname(cfg.Hostname, path.Join(cfg.RootFs, "/etc/hostname")); err != nil {
 		return fmt.Errorf("setting hostname: %s", err)
 	}
 
-	if err := syscall.Mknod(path.Join(conf.RootFs, "/dev/null"), 1, 3); err != nil {
+	if err = syscall.Mknod(path.Join(cfg.RootFs, "/dev/null"), 1, 3); err != nil {
 		if !os.IsExist(err) {
 			return
 		}
 		err = nil
 	}
 
-	if err = createDevSymlinks(conf.RootFs); err != nil {
+	if err = createDevSymlinks(cfg.RootFs); err != nil {
 		return
 	}
 
 	os.Clearenv()
-	if err = setEnvVars(conf.EnvVars); err != nil {
+	if err = setEnvVars(cfg.EnvVars); err != nil {
 		return
 	}
 
-	if err = syscall.Chroot(conf.RootFs); err != nil {
+	if err = syscall.Chroot(cfg.RootFs); err != nil {
 		return
 	}
 
-	if err = os.Chdir(conf.Cwd); err != nil {
+	if err = os.Chdir(cfg.Cwd); err != nil {
 		return
 	}
 
@@ -104,7 +114,7 @@ func pipe(sFd, name string) (f *os.File, err error) {
 }
 
 // TODO: failures must be properly handled while bootstrapping
-func Bootstrap(configFd, logFd string) (err error) {
+func Boot(configFd, logFd string) (err error) {
 
 	logPipe, err := pipe(logFd, "logPipe")
 	if err != nil {
@@ -126,8 +136,8 @@ func Bootstrap(configFd, logFd string) (err error) {
 		_ = configPipe.Close()
 	}()
 
-	conf := config{}
-	if err = json.NewDecoder(configPipe).Decode(&conf); err != nil {
+	cfg := Config{}
+	if err = json.NewDecoder(configPipe).Decode(&cfg); err != nil {
 		err = fmt.Errorf("reading config: %s\n", err)
 		log.Error(err)
 		return
@@ -137,7 +147,7 @@ func Bootstrap(configFd, logFd string) (err error) {
 	// in order to set up the box's env
 	fifoFd := os.Getenv("BOX_FIFO_FD")
 
-	err = setupEnv(&conf)
+	err = setupEnv(cfg)
 	if err != nil {
 		err = fmt.Errorf("unable to setup environment: %s", err)
 		log.Error(err)
@@ -147,7 +157,7 @@ func Bootstrap(configFd, logFd string) (err error) {
 		cleanup()
 	}()
 
-	log.Debugf("Bootstrapping box %s: %s %v \n", conf.Name, conf.EntryPoint, conf.EntryPointArgs)
+	log.Debugf("Bootstrapping box %s: %s %v \n", cfg.Name, cfg.EntryPoint, cfg.EntryPointArgs)
 
 	if fifoFd != "" {
 		fd, e := strconv.Atoi(fifoFd)
@@ -163,8 +173,8 @@ func Bootstrap(configFd, logFd string) (err error) {
 	}
 
 	err = syscall.Exec(
-		conf.EntryPoint,
-		append([]string{path.Base(conf.EntryPoint)}, conf.EntryPointArgs...),
+		cfg.EntryPoint,
+		append([]string{path.Base(cfg.EntryPoint)}, cfg.EntryPointArgs...),
 		os.Environ(),
 	)
 	log.Errorf("bootstrap: executing entry point: %s", err)
