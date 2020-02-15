@@ -57,17 +57,6 @@ func setupEnv(cfg Config) (err error) {
 		return fmt.Errorf("setting hostname: %s", err)
 	}
 
-	if err = syscall.Mknod(path.Join(cfg.RootFs, "/dev/null"), 1, 3); err != nil {
-		if !os.IsExist(err) {
-			return
-		}
-		err = nil
-	}
-
-	if err = createDevSymlinks(cfg.RootFs); err != nil {
-		return
-	}
-
 	os.Clearenv()
 	if err = setEnvVars(cfg.EnvVars); err != nil {
 		return
