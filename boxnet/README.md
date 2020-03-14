@@ -7,6 +7,42 @@ functionalities and supports Linux only.
 The example bellow creates a new veth pair with the given address, move the peer interface to the
 given namespace and finally set both interfaces up.
 
+#### Config file
+
+```
+{
+  "loopback_name": "lo",
+  "interfaces": [
+    {
+      "type": "veth",
+      "name": "eth1",
+      "peer_name": "eth2",
+      "ip": "10.0.0.1/30",
+      "peer_ip":  "10.0.0.2/30",
+      "routes": [
+        {
+          "subnet": "192.168.1.0/24",
+          "gateway": "10.0.0.1"
+        }
+      ]
+    }
+  ],
+  "dns": {
+    "nameservers": [
+      "10.0.0.1"
+    ],
+    "domain": "lambda1",
+    "search": [
+      "lambda1",
+      "lambda.local"
+    ]
+  }
+}
+
+```
+
+#### How to run
+
 ```go run main.go $NSPID```
 
 ```go

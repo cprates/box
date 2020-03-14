@@ -39,6 +39,62 @@ func NewVeth(name, peerName string) (Vether, error) {
 	return veth{link: link}, nil
 }
 
+func VethFromConfig(conf VethConf, nsPID int) (Vether, error) {
+	iface, err := NewVeth(conf.Name, conf.PeerName)
+	if err != nil {
+		return nil, err
+	}
+
+	err = iface.SetPeerNsByPid(nsPID)
+	if err != nil {
+		return nil, err
+	}
+
+	ip, netIP, err := net.ParseCIDR(conf.Ip)
+	if err != nil {
+		return nil, err
+	}
+
+	err = iface.SetAddr(net.IPNet{IP: ip, Mask: netIP.Mask})
+	if err != nil {
+		return nil, err
+	}
+
+	peerIP, peerNetIP, err := net.ParseCIDR(conf.PeerIp)
+	err = ExecuteOnNs(
+		nsPID,
+		func() {
+			if e := iface.SetPeerAddr(net.IPNet{IP: peerIP, Mask: peerNetIP.Mask}); e != nil {
+				panic(e)
+			}
+
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = iface.Up()
+	if err != nil {
+		return nil, err
+	}
+
+	err = ExecuteOnNs(
+		nsPID,
+		func() {
+			if e := iface.PeerUp(); e != nil {
+				panic(e)
+			}
+
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return iface, nil
+}
+
 func (v veth) Down() error {
 	return netlink.LinkSetDown(&v.link)
 }

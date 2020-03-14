@@ -3,12 +3,17 @@ package bootstrap
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"syscall"
 
+	"github.com/cprates/box/boxnet"
+
 	log "github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
 
@@ -22,6 +27,7 @@ type Config struct {
 	Cwd            string
 	EntryPoint     string
 	EntryPointArgs []string
+	NetConfig      *boxnet.NetConf `json:"NetConfig,omitempty"`
 }
 
 func options(cfg Config) (opts []Option) {
@@ -53,8 +59,37 @@ func setupEnv(cfg Config) (err error) {
 
 	// TODO
 	//  https://github.com/opencontainers/runc/blob/master/libcontainer/SPEC.md#runtime-and-init-process
+	//  Still need localtime
 	if err = setHostname(cfg.Hostname, path.Join(cfg.RootFs, "/etc/hostname")); err != nil {
 		return fmt.Errorf("setting hostname: %s", err)
+	}
+
+	resolvF, err := os.OpenFile(path.Join(
+		cfg.RootFs, "/etc/resolv.conf"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0665,
+	)
+	if err != nil {
+		return err
+	}
+	defer resolvF.Close()
+	hostsF, err := os.OpenFile(path.Join(
+		cfg.RootFs, "/etc/hosts"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0665,
+	)
+	if err != nil {
+		return err
+	}
+	defer hostsF.Close()
+	if cfg.NetConfig != nil {
+		if err = setLoopbackUp(cfg.NetConfig.LoopbackName); err != nil {
+			return fmt.Errorf("setting loopback interface up: %s", err)
+		}
+
+		if err = setDNS(resolvF, cfg.NetConfig.DNS); err != nil {
+			return fmt.Errorf("setting dns configs: %s", err)
+		}
+
+		if err = setHosts(hostsF, cfg.NetConfig.DNS); err != nil {
+			return fmt.Errorf("setting hosts: %s", err)
+		}
 	}
 
 	os.Clearenv()
@@ -94,6 +129,55 @@ func setHostname(hostname, path string) (err error) {
 	}
 
 	return
+}
+
+func setDNS(f io.Writer, cfg boxnet.DNSConf) error {
+	if cfg.Domain != "" {
+		if _, err := fmt.Fprintf(f, "domain %s\n", cfg.Domain); err != nil {
+			return err
+		}
+	}
+
+	if len(cfg.Search) > 0 {
+		if _, err := fmt.Fprintf(f, "search %s\n", strings.Join(cfg.Search, " ")); err != nil {
+			return err
+		}
+	}
+
+	for _, server := range cfg.Nameservers {
+		if _, err := fmt.Fprintf(f, "nameserver %s\n", server); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func setHosts(f io.Writer, cfg boxnet.DNSConf) error {
+	// for now just configure localhost
+
+	ipv4 := "127.0.0.1 localhost"
+	ipv6 := "::1 localhost"
+	if cfg.Domain != "" {
+		ipv4 += " localhost." + cfg.Domain
+		ipv6 += " localhost." + cfg.Domain
+	}
+
+	_, err := fmt.Fprintf(f, strings.Join([]string{ipv4, ipv6}, "\n")+"\n")
+	return err
+}
+
+func setLoopbackUp(name string) error {
+	link, err := netlink.LinkByName(name)
+	if err != nil {
+		return fmt.Errorf("unable to find interface %q: %s", name, err)
+	}
+
+	if err = netlink.LinkSetUp(link); err != nil {
+		return fmt.Errorf("unable to set interface %q up: %s", name, err)
+	}
+
+	return nil
 }
 
 func cleanup() {

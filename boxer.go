@@ -10,8 +10,8 @@ import (
 
 // Cartoner defines the interface through which we can manage Boxes.
 type Cartoner interface {
-	CreateBox(name string, io ProcessIO, spec *spec.Spec) (box Boxer, err error)
-	RunBox(name string, io ProcessIO, spec *spec.Spec) (err error)
+	CreateBox(name string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (box Boxer, err error)
+	RunBox(name string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
 	LoadBox(name string, io ProcessIO) (box Boxer, err error)
 	//DestroyBox() (err error)
 }
@@ -62,7 +62,15 @@ func (c *carton) LoadBox(name string, io ProcessIO) (box Boxer, err error) {
 
 // CreateBox creates a new Box with the given name and spec, which will use the given io
 // to communicate with the exterior world. The name must be unique for each workdir.
-func (c *carton) CreateBox(name string, io ProcessIO, spec *spec.Spec) (box Boxer, err error) {
+func (c *carton) CreateBox(
+	name string,
+	io ProcessIO,
+	spec *spec.Spec,
+	opts ...BoxOption,
+) (
+	box Boxer,
+	err error,
+) {
 	boxDir := path.Join(c.workdir, name)
 	err = os.MkdirAll(boxDir, 0766)
 	if err != nil {
@@ -71,7 +79,7 @@ func (c *carton) CreateBox(name string, io ProcessIO, spec *spec.Spec) (box Boxe
 	}
 
 	b := newCartonBox()
-	err = b.create(name, boxDir, io, spec)
+	err = b.create(name, boxDir, io, spec, opts...)
 	if err != nil {
 		err = fmt.Errorf("box: while creating box %q: %s", boxDir, err)
 		return
@@ -83,7 +91,14 @@ func (c *carton) CreateBox(name string, io ProcessIO, spec *spec.Spec) (box Boxe
 
 // RunBox creates and starts a new box with name and io with the given spec, blocking until
 // the box is terminated.
-func (c *carton) RunBox(name string, io ProcessIO, spec *spec.Spec) (err error) {
+func (c *carton) RunBox(
+	name string,
+	io ProcessIO,
+	spec *spec.Spec,
+	opts ...BoxOption,
+) (
+	err error,
+) {
 	boxDir := path.Join(c.workdir, name)
 	err = os.MkdirAll(boxDir, 0766)
 	if err != nil {
@@ -92,7 +107,7 @@ func (c *carton) RunBox(name string, io ProcessIO, spec *spec.Spec) (err error) 
 	}
 
 	b := newCartonBox()
-	err = b.Run(name, boxDir, io, spec)
+	err = b.Run(name, boxDir, io, spec, opts...)
 	if err != nil {
 		err = fmt.Errorf("box: while creating box %q: %s", boxDir, err)
 		return

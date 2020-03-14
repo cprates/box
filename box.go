@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cprates/box/boxnet"
 	"github.com/cprates/box/spec"
 	"github.com/cprates/box/system"
 
@@ -23,12 +24,12 @@ import (
 type Boxer interface {
 	// Creates a new box with the given mame and spec, storing the state in workdir, using the
 	// given io channels to communicate with the outside world
-	create(name, workdir string, io ProcessIO, spec *spec.Spec) (err error)
+	create(name, workdir string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
 	// Starts an existing Box returning immediately after the Box is running
 	Start() (err error)
 	// Run creates and starts a new box with name at workdir with the given spec, blocking until
 	// the box is terminated.
-	Run(name, workdir string, io ProcessIO, spec *spec.Spec) (err error)
+	Run(name, workdir string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
 }
 
 type cartonBox struct {
@@ -60,6 +61,7 @@ type config struct {
 	EnvVars        []string
 	ExecFifoPath   string
 	StateFilePath  string
+	NetConfig      *boxnet.NetConf `json:"NetConfig,omitempty"`
 }
 
 type openResult struct {
@@ -91,7 +93,14 @@ func boxCwd(specCwd string) string {
 }
 
 // here the workdir is from the box's point of view
-func (c *cartonBox) create(name, workdir string, io ProcessIO, spec *spec.Spec) (err error) {
+func (c *cartonBox) create(
+	name, workdir string,
+	io ProcessIO,
+	spec *spec.Spec,
+	opts ...BoxOption,
+) (
+	err error,
+) {
 	c.childProcess = process{io: io}
 	c.config = config{
 		Name:           name,
@@ -103,6 +112,10 @@ func (c *cartonBox) create(name, workdir string, io ProcessIO, spec *spec.Spec) 
 		EnvVars:        spec.Process.Env,
 		ExecFifoPath:   filepath.Join(workdir, execFifoFilename),
 		StateFilePath:  filepath.Join(workdir, stateFilename),
+	}
+
+	for _, opt := range opts {
+		opt(c)
 	}
 
 	if err = c.createExecFifo(); err != nil {
@@ -124,7 +137,14 @@ func (c *cartonBox) create(name, workdir string, io ProcessIO, spec *spec.Spec) 
 
 // Run creates and starts a new box with name at workdir with the given spec, blocking until
 // the box is terminated.
-func (c *cartonBox) Run(name, workdir string, io ProcessIO, spec *spec.Spec) (err error) {
+func (c *cartonBox) Run(
+	name, workdir string,
+	io ProcessIO,
+	spec *spec.Spec,
+	opts ...BoxOption,
+) (
+	err error,
+) {
 	c.childProcess = process{io: io}
 	c.config = config{
 		Name:           name,
@@ -135,6 +155,10 @@ func (c *cartonBox) Run(name, workdir string, io ProcessIO, spec *spec.Spec) (er
 		EntryPointArgs: append(spec.Process.Args[:0:0], spec.Process.Args...)[1:],
 		EnvVars:        spec.Process.Env,
 		StateFilePath:  filepath.Join(workdir, stateFilename),
+	}
+
+	for _, opt := range opts {
+		opt(c)
 	}
 
 	err = c.start()
@@ -233,8 +257,14 @@ func (c *cartonBox) start() (err error) {
 	stat, err := system.Stat(cmd.Process.Pid)
 	if err == nil {
 		c.state.ProcessStartClockTicks = stat.StartTime
-		err = c.saveState()
-		if err == nil {
+
+		if c.config.NetConfig != nil {
+			if err = c.SetupNetFromConfig(); err != nil {
+				return
+			}
+		}
+
+		if err = c.saveState(); err == nil {
 			return
 		}
 	}
@@ -331,6 +361,55 @@ func (c *cartonBox) includeExecFifo(cmd *exec.Cmd) error {
 
 	cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(uintptr(fifoFd), c.config.ExecFifoPath))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BOX_FIFO_FD=%d", stdioFdCount+len(cmd.ExtraFiles)-1))
+	return nil
+}
+
+func (c *cartonBox) SetupNetFromConfig() error {
+	for _, rawConf := range c.config.NetConfig.Interfaces {
+		t, err := boxnet.TypeFromConfig(rawConf)
+		if err != nil {
+			return fmt.Errorf("getting iface type: %s", err)
+		}
+
+		switch t {
+		case "veth":
+			cfg := boxnet.VethConf{}
+			err := boxnet.ConfigFromRawConfig(rawConf, &cfg)
+			if err != nil {
+				return fmt.Errorf("parsing iface config: %+v ** %s", rawConf, err)
+			}
+
+			iface, err := boxnet.VethFromConfig(cfg, c.childProcess.pid)
+			if err != nil {
+				return fmt.Errorf("setting up iface %q: %s", cfg.Name, err)
+			}
+
+			if err = iface.Up(); err != nil {
+				return fmt.Errorf("setting iface up %q: %s", cfg.Name, err)
+			}
+
+			errC := make(chan error, 1)
+			err = boxnet.ExecuteOnNs(c.childProcess.pid, func() {
+				if err = iface.PeerUp(); err != nil {
+					errC <- fmt.Errorf("setting peer interface up %q: %s", cfg.PeerName, err)
+				}
+				errC <- nil
+			})
+			if err != nil {
+				return fmt.Errorf(
+					"entering box NS to set peer interface up %q: %s", cfg.PeerName, err,
+				)
+			}
+
+			if err = <-errC; err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unexpected ifate type: %s", t)
+		}
+
+	}
+
 	return nil
 }
 
