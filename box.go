@@ -392,6 +392,7 @@ func (c *cartonBox) SetupNetFromConfig() error {
 			err = boxnet.ExecuteOnNs(c.childProcess.pid, func() {
 				if err = iface.PeerUp(); err != nil {
 					errC <- fmt.Errorf("setting peer interface up %q: %s", cfg.PeerName, err)
+					return
 				}
 				errC <- nil
 			})
@@ -400,12 +401,30 @@ func (c *cartonBox) SetupNetFromConfig() error {
 					"entering box NS to set peer interface up %q: %s", cfg.PeerName, err,
 				)
 			}
+			if err = <-errC; err != nil {
+				return err
+			}
 
+			err = boxnet.ExecuteOnNs(c.childProcess.pid,
+				func() {
+					err = iface.SetRoutes(cfg.Routes)
+					if err != nil {
+						errC <- fmt.Errorf("configuring routes for iface %q: %s", cfg.PeerName, err)
+						return
+					}
+					errC <- nil
+				},
+			)
+			if err != nil {
+				return fmt.Errorf(
+					"entering box NS to setup peer routes %q: %s", cfg.PeerName, err,
+				)
+			}
 			if err = <-errC; err != nil {
 				return err
 			}
 		default:
-			return fmt.Errorf("unexpected ifate type: %s", t)
+			return fmt.Errorf("unexpected iface type: %s", t)
 		}
 
 	}

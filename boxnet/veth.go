@@ -1,6 +1,7 @@
 package boxnet
 
 import (
+	"fmt"
 	"net"
 	"runtime"
 
@@ -16,10 +17,12 @@ type Vether interface {
 	SetAddr(addr net.IPNet) error
 	SetPeerAddr(addr net.IPNet) error
 	SetPeerNsByPid(nspid int) error
+	SetRoutes(routes []Route) error
 }
 
 type veth struct {
-	link netlink.Veth
+	link    netlink.Veth
+	peerIdx int
 }
 
 func NewVeth(name, peerName string) (Vether, error) {
@@ -44,6 +47,13 @@ func VethFromConfig(conf VethConf, nsPID int) (Vether, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	peerLink, err := netlink.LinkByName(conf.PeerName)
+	if err != nil {
+		return nil, err
+	}
+	pl := iface.(veth)
+	pl.peerIdx = peerLink.Attrs().Index
 
 	err = iface.SetPeerNsByPid(nsPID)
 	if err != nil {
@@ -160,6 +170,29 @@ func (v veth) SetPeerNsByPid(nspid int) (err error) {
 	err = netlink.LinkSetNsPid(peerLink, nspid)
 	if err != nil {
 		return
+	}
+
+	return nil
+}
+
+func (v veth) SetRoutes(routes []Route) error {
+	for _, route := range routes {
+		_, dst, err := net.ParseCIDR(route.Subnet)
+		if err != nil {
+			return fmt.Errorf("parsing route subnet %+v: %s", route.Subnet, err)
+		}
+		gw := net.ParseIP(route.Gateway)
+
+		err = netlink.RouteAdd(
+			&netlink.Route{
+				LinkIndex: v.peerIdx,
+				Dst:       dst,
+				Gw:        gw,
+			},
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

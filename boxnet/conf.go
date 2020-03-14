@@ -16,13 +16,6 @@ type NetConf struct {
 
 var ErrTypeNotDefined = errors.New("interface type not defined")
 
-// EthConf holds a config of a single eth interface.
-//type EthConf struct {
-//	Name   string  `json:"name"`
-//	Type   string  `json:"type"`
-//	Routes []Route `json:"routes,omitempty"`
-//}
-
 // VethConf holds a config of a single veth pair. Ip and PeerIp holds a CIDR format IP.
 type VethConf struct {
 	Type     string  `json:"type"`

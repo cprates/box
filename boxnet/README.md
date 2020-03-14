@@ -21,7 +21,7 @@ given namespace and finally set both interfaces up.
       "peer_ip":  "10.0.0.2/30",
       "routes": [
         {
-          "subnet": "192.168.1.0/24",
+          "subnet": "0.0.0.0/0",
           "gateway": "10.0.0.1"
         }
       ]
