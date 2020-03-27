@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
+	"sync"
 
 	"github.com/cprates/box/spec"
 )
@@ -18,11 +20,14 @@ type Cartoner interface {
 
 type carton struct {
 	workdir string
+	lock    sync.Mutex
 }
 
 const execFifoFilename = "exec.fifo"
 
 const stdioFdCount = 3
+
+var ErrBoxExists = errors.New("box exists")
 
 var _ Cartoner = (*carton)(nil)
 
@@ -31,6 +36,7 @@ var _ Cartoner = (*carton)(nil)
 func New(workdir string) Cartoner {
 	return &carton{
 		workdir: workdir,
+		lock:    sync.Mutex{},
 	}
 }
 
@@ -71,7 +77,19 @@ func (c *carton) CreateBox(
 	box Boxer,
 	err error,
 ) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	boxDir := path.Join(c.workdir, name)
+
+	_, err = os.Stat(boxDir)
+	if err == nil {
+		err = ErrBoxExists
+		return
+	}
+	if !os.IsNotExist(err) {
+		return
+	}
+
 	err = os.MkdirAll(boxDir, 0766)
 	if err != nil {
 		err = fmt.Errorf("box: while creating dir %q: %s", boxDir, err)
@@ -99,7 +117,20 @@ func (c *carton) RunBox(
 ) (
 	err error,
 ) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	boxDir := path.Join(c.workdir, name)
+
+	_, err = os.Stat(boxDir)
+	if err == nil {
+		err = ErrBoxExists
+		return
+	}
+	if !os.IsNotExist(err) {
+		return
+	}
+
 	err = os.MkdirAll(boxDir, 0766)
 	if err != nil {
 		err = fmt.Errorf("box: while creating dir %q: %s", boxDir, err)
@@ -107,7 +138,7 @@ func (c *carton) RunBox(
 	}
 
 	b := newCartonBox()
-	err = b.Run(name, boxDir, io, spec, opts...)
+	err = b.run(name, boxDir, io, spec, opts...)
 	if err != nil {
 		err = fmt.Errorf("box: while creating box %q: %s", boxDir, err)
 		return

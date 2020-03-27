@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,15 +28,16 @@ type Boxer interface {
 	create(name, workdir string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
 	// Starts an existing Box returning immediately after the Box is running
 	Start() (err error)
-	// Run creates and starts a new box with name at workdir with the given spec, blocking until
+	// run creates and starts a new box with name at workdir with the given spec, blocking until
 	// the box is terminated.
-	Run(name, workdir string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
+	run(name, workdir string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
 }
 
 type cartonBox struct {
 	state        state
 	childProcess process
-	config       config
+	config
+	lock sync.Mutex
 }
 
 type process struct {
@@ -72,7 +74,9 @@ type openResult struct {
 var _ Boxer = (*cartonBox)(nil)
 
 func newCartonBox() Boxer {
-	return &cartonBox{}
+	return &cartonBox{
+		lock: sync.Mutex{},
+	}
 }
 
 func boxHostname(name, hostname string) string {
@@ -137,7 +141,7 @@ func (c *cartonBox) create(
 
 // Run creates and starts a new box with name at workdir with the given spec, blocking until
 // the box is terminated.
-func (c *cartonBox) Run(
+func (c *cartonBox) run(
 	name, workdir string,
 	io ProcessIO,
 	spec *spec.Spec,
@@ -179,7 +183,8 @@ func (c *cartonBox) Run(
 
 // Start a previously create Box, returning immediately after the box is started.
 func (c *cartonBox) Start() error {
-	// TODO: must be thread safe
+	c.lock.Lock()
+	defer c.lock.Unlock()
 
 	// first check if the waiting child is still alive
 	stat, err := system.Stat(c.state.BoxPID)
@@ -259,7 +264,7 @@ func (c *cartonBox) start() (err error) {
 		c.state.ProcessStartClockTicks = stat.StartTime
 
 		if c.config.NetConfig != nil {
-			if err = c.SetupNetFromConfig(); err != nil {
+			if err = c.setupNetFromConfig(); err != nil {
 				return
 			}
 		}
@@ -364,7 +369,7 @@ func (c *cartonBox) includeExecFifo(cmd *exec.Cmd) error {
 	return nil
 }
 
-func (c *cartonBox) SetupNetFromConfig() error {
+func (c *cartonBox) setupNetFromConfig() error {
 	for _, rawConf := range c.config.NetConfig.Interfaces {
 		t, err := boxnet.TypeFromConfig(rawConf)
 		if err != nil {
