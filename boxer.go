@@ -95,6 +95,11 @@ func (c *carton) CreateBox(
 		err = fmt.Errorf("box: while creating dir %q: %s", boxDir, err)
 		return
 	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(boxDir)
+		}
+	}()
 
 	b := newCartonBox()
 	err = b.create(name, boxDir, io, spec, opts...)
@@ -136,6 +141,11 @@ func (c *carton) RunBox(
 		err = fmt.Errorf("box: while creating dir %q: %s", boxDir, err)
 		return
 	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(boxDir)
+		}
+	}()
 
 	b := newCartonBox()
 	err = b.run(name, boxDir, io, spec, opts...)
