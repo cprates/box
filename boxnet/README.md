@@ -10,11 +10,12 @@ interfaces are related to the module. Only one module is allowed per config.:
 
 ```
 "model": {
-   "type": "bridge"
+   "type": "bridge",
+   "bridge_name": "docker0"
 }
 ```
 
-#####Supported models
+##### Supported models
 * Bridge: TODO
 
 #### Examples

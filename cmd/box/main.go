@@ -39,14 +39,14 @@ func init() {
 }
 
 func printHelp() {
-	fmt.Println("Usage: box [-flags] {create|start|run} boxname\nFlags:")
+	fmt.Println("Usage: box [-flags] {create|start|run|destroy} boxname\nFlags:")
 	flag.PrintDefaults()
 }
 
 func main() {
 	flag.Parse()
 
-	if len(flag.Args()) < 2 {
+	if len(flag.Args()) < 2 && flag.Args()[actionIdx] != "bootstrap" {
 		printHelp()
 		os.Exit(1)
 	}
@@ -87,6 +87,12 @@ func main() {
 		err = c.RunBox(flag.Args()[boxNameIdx], defaultIO, sp, box.WithNetwork(netConf))
 		if err != nil {
 			log.Fatalln("Failed to run box:", err)
+		}
+	case "destroy":
+		c := box.New(workdir)
+		err := c.DestroyBox(flag.Args()[boxNameIdx])
+		if err != nil {
+			log.Fatalln("Failed to destroy box:", err)
 		}
 	case "bootstrap":
 		log.Debugln("Bootstrapping box...")

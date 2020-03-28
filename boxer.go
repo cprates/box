@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/cprates/box/spec"
+	"github.com/cprates/box/system"
 )
 
 // Cartoner defines the interface through which we can manage Boxes.
@@ -15,7 +16,8 @@ type Cartoner interface {
 	CreateBox(name string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (box Boxer, err error)
 	RunBox(name string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
 	LoadBox(name string, io ProcessIO) (box Boxer, err error)
-	//DestroyBox() (err error)
+	// Destroy an existing box
+	DestroyBox(name string) (err error)
 }
 
 type carton struct {
@@ -155,4 +157,47 @@ func (c *carton) RunBox(
 	}
 
 	return
+}
+
+func (c *carton) DestroyBox(name string) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	state, err := c.loadStateFromName(name)
+	if err != nil {
+		return fmt.Errorf("unable to load state: %s", err)
+	}
+
+	stat, err := system.Stat(state.BoxPID)
+	if err != nil || stat.StartTime != state.ProcessStartClockTicks {
+		boxWd := path.Join(c.workdir, state.BoxConfig.Name)
+		err = os.RemoveAll(boxWd)
+		if err != nil {
+			return fmt.Errorf("cleaning up box dir: %s", err)
+		}
+
+		return nil
+	}
+
+	p, err := os.FindProcess(state.BoxPID)
+	if err != nil {
+		// this shouldn't happen in linux according to the doc
+		return fmt.Errorf("couldn't find process to kill with PID %d: %s", state.BoxPID, err)
+	}
+
+	err = p.Kill()
+	if err != nil {
+		return fmt.Errorf("unable to kill process with PID %d: %s", state.BoxPID, err)
+	}
+
+	// TODO: add a timeout
+	<-awaitProcessExit(state.BoxPID, make(chan struct{}))
+
+	boxWd := path.Join(c.workdir, state.BoxConfig.Name)
+	err = os.RemoveAll(boxWd)
+	if err != nil {
+		return fmt.Errorf("cleaning up box dir after killing process: %s", err)
+	}
+
+	return nil
 }
