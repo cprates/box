@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := build
 
 build:
-	go build
+	go build ./cmd/box
 
 fmt:
 	./fmt.sh

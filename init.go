@@ -1,4 +1,4 @@
-package main
+package box
 
 import (
 	"os"
@@ -11,13 +11,11 @@ import (
 
 func init() {
 	if len(os.Args) > 1 && os.Args[1] == "bootstrap" {
-		// TODO: do I really need this? Or When?
-		//boxRuntime.GOMAXPROCS(1)
-		//boxRuntime.LockOSThread()
-
-		setupLog()
-		log.Debug("Starting bootstrap process...")
+		runtime.GOMAXPROCS(1)
+		runtime.LockOSThread()
 	}
+
+	setupLog()
 }
 
 func setupLog() {

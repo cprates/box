@@ -1,4 +1,4 @@
-package main
+package box
 
 import "github.com/cprates/box/boxnet"
 
