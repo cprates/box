@@ -370,7 +370,34 @@ func (c *cartonBox) includeExecFifo(cmd *exec.Cmd) error {
 }
 
 func (c *cartonBox) setupNetFromConfig() error {
-	for _, rawConf := range c.config.NetConfig.Interfaces {
+	// search for module
+	netConfig := c.config.NetConfig
+	if netConfig.Model != nil {
+		m, err := boxnet.ModelFromConfig(netConfig.Model)
+		if err != nil {
+			return fmt.Errorf("getting network model type: %s", err)
+		}
+
+		switch m {
+		case "bridge":
+			modelConfig := boxnet.ModelBridge{}
+			err := boxnet.ConfigFromRawConfig(netConfig.Model, &modelConfig)
+			if err != nil {
+				return fmt.Errorf("parsing model config: %+v ** %s", netConfig.Model, err)
+			}
+			_, err = boxnet.NewBridgeModel(modelConfig.BrName, c.childProcess.pid, netConfig.Interfaces)
+			if err != nil {
+				return fmt.Errorf("creating network model: %s", err)
+			}
+		default:
+			return fmt.Errorf("unknown model type %q", m)
+		}
+
+		return nil
+	}
+
+	// if a model is not configured, handle interfaces on their own
+	for _, rawConf := range netConfig.Interfaces {
 		t, err := boxnet.TypeFromConfig(rawConf)
 		if err != nil {
 			return fmt.Errorf("getting iface type: %s", err)
@@ -384,49 +411,9 @@ func (c *cartonBox) setupNetFromConfig() error {
 				return fmt.Errorf("parsing iface config: %+v ** %s", rawConf, err)
 			}
 
-			iface, err := boxnet.VethFromConfig(cfg, c.childProcess.pid)
+			_, err = boxnet.AttachVeth(cfg, c.childProcess.pid)
 			if err != nil {
-				return fmt.Errorf("setting up iface %q: %s", cfg.Name, err)
-			}
-
-			if err = iface.Up(); err != nil {
-				return fmt.Errorf("setting iface up %q: %s", cfg.Name, err)
-			}
-
-			errC := make(chan error, 1)
-			err = boxnet.ExecuteOnNs(c.childProcess.pid, func() {
-				if err = iface.PeerUp(); err != nil {
-					errC <- fmt.Errorf("setting peer interface up %q: %s", cfg.PeerName, err)
-					return
-				}
-				errC <- nil
-			})
-			if err != nil {
-				return fmt.Errorf(
-					"entering box NS to set peer interface up %q: %s", cfg.PeerName, err,
-				)
-			}
-			if err = <-errC; err != nil {
-				return err
-			}
-
-			err = boxnet.ExecuteOnNs(c.childProcess.pid,
-				func() {
-					err = iface.SetRoutes(cfg.Routes)
-					if err != nil {
-						errC <- fmt.Errorf("configuring routes for iface %q: %s", cfg.PeerName, err)
-						return
-					}
-					errC <- nil
-				},
-			)
-			if err != nil {
-				return fmt.Errorf(
-					"entering box NS to setup peer routes %q: %s", cfg.PeerName, err,
-				)
-			}
-			if err = <-errC; err != nil {
-				return err
+				return fmt.Errorf("unable to attach veth %q: %s", cfg.Name, t)
 			}
 		default:
 			return fmt.Errorf("unexpected iface type: %s", t)

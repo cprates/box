@@ -8,8 +8,6 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-var _ Vether = (*veth)(nil)
-
 type Vether interface {
 	IFacer
 	PeerDown() error
@@ -24,6 +22,8 @@ type veth struct {
 	link    netlink.Veth
 	peerIdx int
 }
+
+var _ Vether = (*veth)(nil)
 
 func NewVeth(name, peerName string) (Vether, error) {
 	la := netlink.NewLinkAttrs()
@@ -105,12 +105,65 @@ func VethFromConfig(conf VethConf, nsPID int) (Vether, error) {
 	return iface, nil
 }
 
+func AttachVeth(cfg VethConf, nsPID int) (Vether, error) {
+	iface, err := VethFromConfig(cfg, nsPID)
+	if err != nil {
+		return nil, fmt.Errorf("setting up iface %q: %s", cfg.Name, err)
+	}
+
+	if err = iface.Up(); err != nil {
+		return nil, fmt.Errorf("setting iface up %q: %s", cfg.Name, err)
+	}
+
+	errC := make(chan error, 1)
+	err = ExecuteOnNs(nsPID, func() {
+		if err = iface.PeerUp(); err != nil {
+			errC <- fmt.Errorf("setting peer interface up %q: %s", cfg.PeerName, err)
+			return
+		}
+		errC <- nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf(
+			"entering box NS to set peer interface up %q: %s", cfg.PeerName, err,
+		)
+	}
+	if err = <-errC; err != nil {
+		return nil, err
+	}
+
+	err = ExecuteOnNs(nsPID,
+		func() {
+			err = iface.SetRoutes(cfg.Routes)
+			if err != nil {
+				errC <- fmt.Errorf("configuring routes for iface %q: %s", cfg.PeerName, err)
+				return
+			}
+			errC <- nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"entering box NS to setup peer routes %q: %s", cfg.PeerName, err,
+		)
+	}
+	if err = <-errC; err != nil {
+		return nil, err
+	}
+
+	return iface, nil
+}
+
 func (v veth) Down() error {
 	return netlink.LinkSetDown(&v.link)
 }
 
 func (v veth) Up() error {
 	return netlink.LinkSetUp(&v.link)
+}
+
+func (v veth) SetMaster(master netlink.Link) error {
+	return netlink.LinkSetMaster(&v.link, master)
 }
 
 func (v veth) PeerDown() error {

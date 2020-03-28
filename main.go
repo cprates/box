@@ -40,10 +40,9 @@ func main() {
 		}
 
 		c := New(wd)
-		_, err = c.CreateBox(os.Args[2], io, spec, nil)
+		_, err = c.CreateBox(os.Args[2], io, spec)
 		if err != nil {
-			log.Error("Failed to create box:", err)
-			os.Exit(-1)
+			log.Fatalln("Failed to create box: ", err)
 		}
 	case "start":
 		wd, _ := os.Getwd()
@@ -67,7 +66,7 @@ func main() {
 			log.Fatalln("Failed to load spec:", err)
 		}
 
-		netConf, err := boxnet.Load("netconf.json")
+		netConf, err := boxnet.Load("netconf2.json")
 		if err != nil {
 			log.Fatalln("Failed to load spec:", err)
 		}

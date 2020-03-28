@@ -65,14 +65,14 @@ func setupEnv(cfg Config) (err error) {
 	}
 
 	resolvF, err := os.OpenFile(path.Join(
-		cfg.RootFs, "/etc/resolv.conf"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0665,
+		cfg.RootFs, "/etc/resolv.conf"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0664,
 	)
 	if err != nil {
 		return err
 	}
 	defer resolvF.Close()
 	hostsF, err := os.OpenFile(path.Join(
-		cfg.RootFs, "/etc/hosts"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0665,
+		cfg.RootFs, "/etc/hosts"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0664,
 	)
 	if err != nil {
 		return err

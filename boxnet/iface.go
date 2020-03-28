@@ -1,14 +1,17 @@
 package boxnet
 
 import (
-	"github.com/vishvananda/netns"
 	"runtime"
+
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 )
 
 type IFacer interface {
 	Down() error
 	Up() error
 	Type() string
+	SetMaster(master netlink.Link) error
 }
 
 func ExecuteOnNs(pidns int, f func()) (err error) {

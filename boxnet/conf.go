@@ -9,12 +9,19 @@ import (
 
 // NetConf holds config for interfaces and DNS resolvers.
 type NetConf struct {
+	Model        map[string]interface{}   `json:"model,omitempty"`
 	LoopbackName string                   `json:"loopback_name,omitempty"`
 	Interfaces   []map[string]interface{} `json:"interfaces,omitempty"`
 	DNS          DNSConf                  `json:"dns,omitempty"`
 }
 
-var ErrTypeNotDefined = errors.New("interface type not defined")
+type Model struct {
+	Type string `json:"type"`
+}
+
+type ModelBridge struct {
+	BrName string `json:"bridge_name"`
+}
 
 // VethConf holds a config of a single veth pair. Ip and PeerIp holds a CIDR format IP.
 type VethConf struct {
@@ -39,6 +46,9 @@ type DNSConf struct {
 	Search      []string `json:"search,omitempty"`
 }
 
+var ErrTypeNotDefined = errors.New("interface type not defined")
+var ErrModelNotDefined = errors.New("network model not defined")
+
 func Load(path string) (*NetConf, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -62,6 +72,20 @@ func TypeFromConfig(conf map[string]interface{}) (string, error) {
 	tStr, ok := t.(string)
 	if !ok {
 		return "", fmt.Errorf("invalid type: %+v", conf)
+	}
+
+	return tStr, nil
+}
+
+func ModelFromConfig(conf map[string]interface{}) (string, error) {
+	t, ok := conf["type"]
+	if !ok {
+		return "", ErrModelNotDefined
+	}
+
+	tStr, ok := t.(string)
+	if !ok {
+		return "", fmt.Errorf("invalid model: %+v", conf)
 	}
 
 	return tStr, nil
