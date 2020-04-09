@@ -3,6 +3,7 @@ package spec
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -44,8 +45,8 @@ type Root struct {
 	Readonly bool `json:"readonly,omitempty"`
 }
 
-// Load a Box spec from the given path.
-func Load(path string) (spec *Spec, err error) {
+// LoadFromFile a Box spec in the given path.
+func LoadFromFile(path string) (spec *Spec, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		err = fmt.Errorf("unable to open spec file: %s", err)
@@ -54,6 +55,20 @@ func Load(path string) (spec *Spec, err error) {
 	defer f.Close()
 
 	if err = json.NewDecoder(f).Decode(&spec); err != nil {
+		return nil, err
+	}
+
+	if err = spec.Valid(); err != nil {
+		err = fmt.Errorf("given file contains invalid spec: %s", err)
+		return nil, err
+	}
+
+	return spec, nil
+}
+
+// Load a Box spec from the given reader.
+func Load(rd io.Reader) (spec *Spec, err error) {
+	if err = json.NewDecoder(rd).Decode(&spec); err != nil {
 		return nil, err
 	}
 

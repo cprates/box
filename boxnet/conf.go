@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -49,7 +50,7 @@ type DNSConf struct {
 var ErrTypeNotDefined = errors.New("interface type not defined")
 var ErrModelNotDefined = errors.New("network model not defined")
 
-func Load(path string) (*NetConf, error) {
+func LoadFromFile(path string) (*NetConf, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		err = fmt.Errorf("unable to open config file: %s", err)
@@ -61,6 +62,11 @@ func Load(path string) (*NetConf, error) {
 	err = json.NewDecoder(f).Decode(conf)
 
 	return conf, err
+}
+
+func Load(rd io.Reader) (*NetConf, error) {
+	conf := &NetConf{}
+	return conf, json.NewDecoder(rd).Decode(conf)
 }
 
 func TypeFromConfig(conf map[string]interface{}) (string, error) {

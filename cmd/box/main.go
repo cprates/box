@@ -75,7 +75,7 @@ func main() {
 
 	switch flag.Args()[actionIdx] {
 	case "create":
-		sp, err := spec.Load(configFile)
+		sp, err := spec.LoadFromFile(configFile)
 		if err != nil {
 			log.Fatalln("Failed to load spec:", err)
 		}
@@ -95,12 +95,12 @@ func main() {
 			log.Fatalln("Failed to start box:", err)
 		}
 	case "run":
-		sp, err := spec.Load(configFile)
+		sp, err := spec.LoadFromFile(configFile)
 		if err != nil {
 			log.Fatalln("Failed to load spec:", err)
 		}
 
-		netConf, err := boxnet.Load(netconfFile)
+		netConf, err := boxnet.LoadFromFile(netconfFile)
 		if err != nil {
 			log.Fatalln("Failed to load netconf:", err)
 		}
