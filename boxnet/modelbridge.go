@@ -40,6 +40,9 @@ func NewBridgeModel(brName string, nsPID int, ifsConfig []map[string]interface{}
 			}
 
 			iFace, err = AttachVeth(cfg, nsPID)
+			if err != nil {
+				return nil, fmt.Errorf("unable to attach veth to NS PID %d: %s", nsPID, err)
+			}
 			err = iFace.SetMaster(brLink)
 			if err != nil {
 				return nil, fmt.Errorf("unable to set master to %q: %s", cfg.Name, err)
