@@ -68,6 +68,11 @@ func printHelp() {
 func main() {
 	flag.Parse()
 
+	if len(flag.Args()) < 1 {
+		printHelp()
+		os.Exit(1)
+	}
+
 	if len(flag.Args()) < 2 && flag.Args()[actionIdx] != "bootstrap" {
 		printHelp()
 		os.Exit(1)
@@ -80,8 +85,13 @@ func main() {
 			log.Fatalln("Failed to load spec:", err)
 		}
 
+		netConf, err := boxnet.LoadFromFile(netconfFile)
+		if err != nil {
+			log.Fatalln("Failed to load netconf:", err)
+		}
+
 		c := box.New(workdir)
-		_, err = c.CreateBox(flag.Args()[boxNameIdx], defaultIO, sp)
+		_, err = c.CreateBox(flag.Args()[boxNameIdx], defaultIO, sp, box.WithNetwork(netConf))
 		if err != nil {
 			log.Fatalln("Failed to create box: ", err)
 		}
