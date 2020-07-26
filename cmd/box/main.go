@@ -38,7 +38,7 @@ func init() {
 
 	flag.StringVar(&configFile, "spec", "config.json", "Path to the spec file")
 	flag.StringVar(&netconfFile, "netconf", "netconf.json", "Path to the file with network config")
-	flag.StringVar(&workdir, "workdir", wd, "working dir where to store created boxes")
+	flag.StringVar(&workdir, "workdir", wd, "Absolute path where to store created boxes")
 
 	log.StandardLogger().SetNoLock()
 	if os.Getenv("BOX_DEBUG") == "1" {

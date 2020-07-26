@@ -47,7 +47,7 @@ func New(workdir string) Cartoner {
 func (c *carton) LoadBox(name string, io ProcessIO) (box Boxer, err error) {
 	state, err := c.loadStateFromName(name)
 	if err != nil {
-		err = fmt.Errorf("box: while loading state: %s", err)
+		err = fmt.Errorf("while loading state: %s", err)
 		return nil, err
 	}
 
@@ -94,7 +94,7 @@ func (c *carton) CreateBox(
 
 	err = os.MkdirAll(boxDir, 0766)
 	if err != nil {
-		err = fmt.Errorf("box: while creating dir %q: %s", boxDir, err)
+		err = fmt.Errorf("while creating dir %q: %s", boxDir, err)
 		return
 	}
 	defer func() {
@@ -106,7 +106,7 @@ func (c *carton) CreateBox(
 	b := newCartonBox()
 	err = b.create(name, boxDir, io, spec, opts...)
 	if err != nil {
-		err = fmt.Errorf("box: while creating box %q: %s", boxDir, err)
+		err = fmt.Errorf("while creating box %q: %s", boxDir, err)
 		return
 	}
 
@@ -140,7 +140,7 @@ func (c *carton) RunBox(
 
 	err = os.MkdirAll(boxDir, 0766)
 	if err != nil {
-		err = fmt.Errorf("box: while creating dir %q: %s", boxDir, err)
+		err = fmt.Errorf("while creating dir %q: %s", boxDir, err)
 		return
 	}
 	defer func() {
@@ -152,7 +152,7 @@ func (c *carton) RunBox(
 	b := newCartonBox()
 	err = b.run(name, boxDir, io, spec, opts...)
 	if err != nil {
-		err = fmt.Errorf("box: while creating box %q: %s", boxDir, err)
+		err = fmt.Errorf("while creating box %q: %s", boxDir, err)
 		return
 	}
 
