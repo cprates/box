@@ -45,29 +45,33 @@ func NewVeth(name, peerName string) (Vether, error) {
 func VethFromConfig(conf VethConf, nsPID int) (Vether, error) {
 	iface, err := NewVeth(conf.Name, conf.PeerName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create new veth: %s", err)
 	}
 
 	peerLink, err := netlink.LinkByName(conf.PeerName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to get link by name %q: %s", conf.PeerName, err)
 	}
 	pl := iface.(veth)
 	pl.peerIdx = peerLink.Attrs().Index
 
 	err = iface.SetPeerNsByPid(nsPID)
 	if err != nil {
-		return nil, err
+		// if the link gets created and we fail to move it to the correct NS, delete the link.
+		// This only needs to be done manually here, because as soon as the peer iface is attached
+		// to the correct NS, the veth is deleted by the kernel when the process dies
+		_ = netlink.LinkDel(peerLink)
+		return nil, fmt.Errorf("unable to move peer iface to ns %d: %s", nsPID, err)
 	}
 
 	ip, netIP, err := net.ParseCIDR(conf.Ip)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to parse configured IP %q: %s", conf.Ip, err)
 	}
 
 	err = iface.SetAddr(net.IPNet{IP: ip, Mask: netIP.Mask})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to set peer iface addr: %s", err)
 	}
 
 	peerIP, peerNetIP, err := net.ParseCIDR(conf.PeerIp)
@@ -81,12 +85,12 @@ func VethFromConfig(conf VethConf, nsPID int) (Vether, error) {
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to set peer address: %s", err)
 	}
 
 	err = iface.Up()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to set iface up: %s", err)
 	}
 
 	err = ExecuteOnNs(
@@ -99,7 +103,7 @@ func VethFromConfig(conf VethConf, nsPID int) (Vether, error) {
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to set peer iface up: %s", err)
 	}
 
 	return iface, nil
