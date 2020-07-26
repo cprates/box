@@ -1,0 +1,32 @@
+{
+  "loopback_name": "lo",
+  "model": {
+    "type": "bridge",
+    "bridge_name": "docker0"
+  },
+  "interfaces": [
+    {
+      "type": "veth",
+      "name": "eth1",
+      "peer_name": "eth2",
+      "ip": "0.0.0.0/0",
+      "peer_ip":  "172.17.0.6/28",
+      "routes": [
+        {
+          "subnet": "0.0.0.0/0",
+          "gateway": "172.17.0.1"
+        }
+      ]
+    }
+  ],
+  "dns": {
+    "nameservers": [
+      "8.8.8.8"
+    ],
+    "domain": "box",
+    "search": [
+      "box",
+      "box.local"
+    ]
+  }
+}

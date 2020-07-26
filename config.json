@@ -1,0 +1,21 @@
+{
+  "ociVersion": "1.0.1",
+
+  "root": {
+    "path": "/path/to/your/fs"
+  },
+
+  "hostname": "box.instance",
+
+  "process": {
+    "args": [
+      "/bin/sh"
+    ],
+    "env": [
+      "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/go/bin",
+      "TERM=xterm",
+      "HOME=/root"
+    ],
+    "cwd": "/"
+  }
+}
