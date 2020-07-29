@@ -1,45 +1,74 @@
+# box
 *box* is a container runtime, the result of my journey in learning how containers work, and is not
 meant to be used in production or replace other solutions like *runC*, *LXC*, etc.
 
-The spec file (config.json) is based on the OCI spec, which means that you can easily convert existing spec - not supported configs are ignored.
+The spec file (config.json) is based on the OCI spec, which means that you can easily convert existing specs - unsupported configs are ignored.
 
-*box* is also the container runtime powering my AWS Lambda mock in my other project [LWS](https://github.com/cprates/lws).
+*box* is also the container runtime powering an AWS Lambda mock in my other project [LWS](https://github.com/cprates/lws).
 
 
 ## Running a box (container)
 
 If you have *Docker* installed you are good to go, the `netconf.json` example file is ready to use 
 *Docker's* bridge interface. If not, you'll need to create a bridge interface and update
-`netconf.json` example with your bridge name and addressing.
+`netconf.json` example file with your bridge name and addressing.
 
 First clone and build the project (you'll need golang installed)
 
-```make build```
-
+```bash
+make build
+```
 
 Get a file system to run the *box* on. The easiest way to get one is using *docker* or 
 *debootstrap*.
-This will store the Linux Alpine FS in `fs/` folder using docker:
+The following line stores the Linux Alpine FS in `fs/` folder using docker:
 
-```mkdir -p fs && docker export $(docker create alpine) | tar -C fs -xvf -```
+```bash
+mkdir -p fs && docker export $(docker create alpine) | tar -C fs -xvf -
+```
 
 Then point `root.path` in `config.json` template file to your newly created FS folder 
 (*absolute path*)
 
-Finally run your *box*. You should get a new prompt `/ #`:
+Finally run your *box* (need root). You should get a new prompt `/ #`:
 
-```sudo ./box run mybox```
+```bash
+sudo ./box run mybox
+```
 
 At this point you are inside your box. Have fun!
+```bash
+ps aux
+ifconfig -a
+ping 8.8.8.8
+```
 
-`ps aux`
+*box* also allows you to create boxes and run them later. To test this, first update `process.args` in `config.json` to something like `"/bin/ps", "aux"`.
+Running applications that need to read from the console won't work in this mode.
 
-`ifconfig -a`
+First create a box that will be waiting to start
+```bash
+sudo ./box create mybox
+```
 
-`ping 8.8.8.8`
+Start it when you need:
+```bash
+sudo ./box start mybox
+```
+
+And finally destroy it
+```bash
+sudo ./box destroy mybox
+```
 
 
- ## Runtime Actions
+## Configs
+Unless specified by passing flags `--spec` and `--netconf`, by default *box* loads the spec and network config from `config.json` and `netconf.json` respectively.
+
+Both `config.json` and `netconf.json` in this repo contain all supported configs by *box*.
+
+
+## Runtime Actions
  
  |     Action     |  Supported  |                         Description                                |
  | -------------- | ----------- | ----------------------------------------------------- |
@@ -57,7 +86,7 @@ At this point you are inside your box. Have fun!
 
 
 ## Mount points
-At its current state, *box* ignores the mount points in the spec and configures a static list of 
+At its current state, *box* ignores the mount points in the spec file and configures a static list of 
 mount points:
 * /proc
 * /tmp
@@ -68,7 +97,7 @@ mount points:
 * /dev/shm
 
 ## Device nodes
-Same as for mount points. A static list of device nodes is configures for every box:
+Same as for mount points. A static list of device nodes is configures for every box. Note that `console` is not setup:
 * /dev/null
 * /dev/zero
 * /dev/full
@@ -79,7 +108,7 @@ Same as for mount points. A static list of device nodes is configures for every 
 
 
 ## Namespaces
-Namespaces list from the spec file are also ignored. A static list is configures instead:
+Namespaces list from the spec file are also ignored. A static list is configured instead:
 * IPC
 * Network
 * Mount
