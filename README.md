@@ -1,5 +1,5 @@
 # box
-*box* is a container runtime, the result of my journey in learning how containers work, and is not
+*box* is a low-level Linux container runtime, the result of my journey in learning how containers work, and is not
 meant to be used in production or replace other solutions like *runC*, *LXC*, etc.
 
 The spec file (config.json) is based on the OCI spec, which means that you can easily convert existing specs - unsupported configs are ignored.
@@ -30,7 +30,7 @@ mkdir -p fs && docker export $(docker create alpine) | tar -C fs -xvf -
 Then point `root.path` in `config.json` template file to your newly created FS folder 
 (*absolute path*)
 
-Finally run your *box* (need root). You should get a new prompt `/ #`:
+Finally run your box (need root). You should get a new prompt `/ #`:
 
 ```bash
 sudo ./box run mybox
@@ -44,14 +44,14 @@ ping 8.8.8.8
 ```
 
 *box* also allows you to create boxes and run them later. To test this, first update `process.args` in `config.json` to something like `"/bin/ps", "aux"`.
-Running applications that need to read from the console won't work in this mode.
+Running applications that need to read from `stdin` won't work in this mode.
 
-First create a box that will be waiting to start
+First create a box that will be waiting to be started
 ```bash
 sudo ./box create mybox
 ```
 
-Start it when you need:
+Start it when you want:
 ```bash
 sudo ./box start mybox
 ```
@@ -65,7 +65,7 @@ sudo ./box destroy mybox
 ## Configs
 Unless specified by passing flags `--spec` and `--netconf`, by default *box* loads the spec and network config from `config.json` and `netconf.json` respectively.
 
-Both `config.json` and `netconf.json` in this repo contain all supported configs by *box*.
+Both `config.json` and `netconf.json` in this repo contain all supported configs.
 
 
 ## Runtime Actions
