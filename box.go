@@ -189,13 +189,13 @@ func (c *cartonBox) Start() error {
 	// first check if the waiting child is still alive
 	stat, err := system.Stat(c.state.BoxPID)
 	if err != nil {
-		return fmt.Errorf("box: box is stopped")
+		return fmt.Errorf("box is stopped")
 	}
 
 	if stat.StartTime != c.state.ProcessStartClockTicks ||
 		stat.State == system.Zombie ||
 		stat.State == system.Dead {
-		return fmt.Errorf("box: box is stopped")
+		return fmt.Errorf("box is stopped")
 	}
 
 	c.childProcess.pid = c.state.BoxPID

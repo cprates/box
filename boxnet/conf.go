@@ -53,7 +53,6 @@ var ErrModelNotDefined = errors.New("network model not defined")
 func LoadFromFile(path string) (*NetConf, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		err = fmt.Errorf("unable to open config file: %s", err)
 		return nil, err
 	}
 	defer f.Close()
