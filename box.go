@@ -73,7 +73,7 @@ type openResult struct {
 
 var _ Box = (*boxInternal)(nil)
 
-func newCartonBox() Box {
+func newBox() Box {
 	return &boxInternal{
 		lock: sync.Mutex{},
 	}

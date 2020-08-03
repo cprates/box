@@ -102,7 +102,7 @@ func (m *manager) Create(
 		}
 	}()
 
-	b := newCartonBox()
+	b := newBox()
 	err = b.create(name, boxDir, io, spec, opts...)
 	if err != nil {
 		err = fmt.Errorf("while creating box %q: %s", boxDir, err)
@@ -115,7 +115,7 @@ func (m *manager) Create(
 
 // Run creates and starts a new box with name and io with the given spec, blocking until
 // the box is terminated.
-func (c *manager) Run(
+func (m *manager) Run(
 	name string,
 	io ProcessIO,
 	spec *spec.Spec,
@@ -123,10 +123,10 @@ func (c *manager) Run(
 ) (
 	err error,
 ) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
-	boxDir := path.Join(c.workdir, name)
+	boxDir := path.Join(m.workdir, name)
 
 	_, err = os.Stat(boxDir)
 	if err == nil {
@@ -148,7 +148,7 @@ func (c *manager) Run(
 		}
 	}()
 
-	b := newCartonBox()
+	b := newBox()
 	err = b.run(name, boxDir, io, spec, opts...)
 	if err != nil {
 		err = fmt.Errorf("while creating box %q: %s", boxDir, err)
