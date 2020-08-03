@@ -11,16 +11,15 @@ import (
 	"github.com/cprates/box/system"
 )
 
-// Cartoner defines the interface through which we can manage Boxes.
-type Cartoner interface {
-	CreateBox(name string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (box Boxer, err error)
-	RunBox(name string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
-	LoadBox(name string, io ProcessIO) (box Boxer, err error)
-	// Destroy an existing box
-	DestroyBox(name string) (err error)
+// Interface defines the interface through which we can manage Boxes.
+type Interface interface {
+	Create(name string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (box Box, err error)
+	Run(name string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
+	Load(name string, io ProcessIO) (box Box, err error)
+	Destroy(name string) (err error)
 }
 
-type carton struct {
+type manager struct {
 	workdir string
 	lock    sync.Mutex
 }
@@ -31,27 +30,27 @@ const stdioFdCount = 3
 
 var ErrBoxExists = errors.New("box exists")
 
-var _ Cartoner = (*carton)(nil)
+var _ Interface = (*manager)(nil)
 
-// New returns a new ready to use Boxes manager which will use the given workdir to store and load
-// Boxes. The given workdir should be an absolute path.
-func New(workdir string) Cartoner {
-	return &carton{
+// New returns a new ready to use Box manager which will use the given workdir to store and load
+// Boxes. The given workdir must be an absolute path.
+func New(workdir string) Interface {
+	return &manager{
 		workdir: workdir,
 		lock:    sync.Mutex{},
 	}
 }
 
-// LoadBox loads an existing box with the given name from the configured workdir.
+// Load loads an existing box with the given name from the configured workdir.
 // TODO: io doesn't seem to belong here... Should come from the state file.
-func (c *carton) LoadBox(name string, io ProcessIO) (box Boxer, err error) {
-	state, err := c.loadStateFromName(name)
+func (m *manager) Load(name string, io ProcessIO) (box Box, err error) {
+	state, err := m.loadStateFromName(name)
 	if err != nil {
 		err = fmt.Errorf("while loading state: %s", err)
 		return nil, err
 	}
 
-	box = &cartonBox{
+	box = &boxInternal{
 		state:        *state,
 		childProcess: process{io: io},
 		config: config{
@@ -68,20 +67,20 @@ func (c *carton) LoadBox(name string, io ProcessIO) (box Boxer, err error) {
 	return
 }
 
-// CreateBox creates a new Box with the given name and spec, which will use the given io
+// Create creates a new Box with the given name and spec, which will use the given io
 // to communicate with the exterior world. The name must be unique for each workdir.
-func (c *carton) CreateBox(
+func (m *manager) Create(
 	name string,
 	io ProcessIO,
 	spec *spec.Spec,
 	opts ...BoxOption,
 ) (
-	box Boxer,
+	box Box,
 	err error,
 ) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	boxDir := path.Join(c.workdir, name)
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	boxDir := path.Join(m.workdir, name)
 
 	_, err = os.Stat(boxDir)
 	if err == nil {
@@ -114,9 +113,9 @@ func (c *carton) CreateBox(
 	return
 }
 
-// RunBox creates and starts a new box with name and io with the given spec, blocking until
+// Run creates and starts a new box with name and io with the given spec, blocking until
 // the box is terminated.
-func (c *carton) RunBox(
+func (c *manager) Run(
 	name string,
 	io ProcessIO,
 	spec *spec.Spec,
@@ -159,18 +158,18 @@ func (c *carton) RunBox(
 	return
 }
 
-func (c *carton) DestroyBox(name string) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+func (m *manager) Destroy(name string) error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
-	state, err := c.loadStateFromName(name)
+	state, err := m.loadStateFromName(name)
 	if err != nil {
 		return fmt.Errorf("unable to load state: %s", err)
 	}
 
 	stat, err := system.Stat(state.BoxPID)
 	if err != nil || stat.StartTime != state.ProcessStartClockTicks {
-		boxWd := path.Join(c.workdir, state.BoxConfig.Name)
+		boxWd := path.Join(m.workdir, state.BoxConfig.Name)
 		err = os.RemoveAll(boxWd)
 		if err != nil {
 			return fmt.Errorf("cleaning up box dir: %s", err)
@@ -193,7 +192,7 @@ func (c *carton) DestroyBox(name string) error {
 	// TODO: add a timeout
 	<-awaitProcessExit(state.BoxPID, make(chan struct{}))
 
-	boxWd := path.Join(c.workdir, state.BoxConfig.Name)
+	boxWd := path.Join(m.workdir, state.BoxConfig.Name)
 	err = os.RemoveAll(boxWd)
 	if err != nil {
 		return fmt.Errorf("cleaning up box dir after killing process: %s", err)

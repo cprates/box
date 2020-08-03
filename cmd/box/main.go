@@ -85,19 +85,20 @@ func main() {
 			log.Fatalln("Failed to load spec:", err)
 		}
 
+		// TODO: instead of failing on error, just don't init the network
 		netConf, err := boxnet.LoadFromFile(netconfFile)
 		if err != nil {
 			log.Fatalln("Failed to load netconf:", err)
 		}
 
 		c := box.New(workdir)
-		_, err = c.CreateBox(flag.Args()[boxNameIdx], defaultIO, sp, box.WithNetwork(netConf))
+		_, err = c.Create(flag.Args()[boxNameIdx], defaultIO, sp, box.WithNetwork(netConf))
 		if err != nil {
 			log.Fatalln("Failed to create box: ", err)
 		}
 	case "start":
 		c := box.New(workdir)
-		b, err := c.LoadBox(flag.Args()[boxNameIdx], defaultIO)
+		b, err := c.Load(flag.Args()[boxNameIdx], defaultIO)
 		if err != nil {
 			log.Fatalln("Failed to load box:", err)
 		}
@@ -116,13 +117,13 @@ func main() {
 		}
 
 		c := box.New(workdir)
-		err = c.RunBox(flag.Args()[boxNameIdx], defaultIO, sp, box.WithNetwork(netConf))
+		err = c.Run(flag.Args()[boxNameIdx], defaultIO, sp, box.WithNetwork(netConf))
 		if err != nil {
 			log.Fatalln("Failed to run box:", err)
 		}
 	case "destroy":
 		c := box.New(workdir)
-		err := c.DestroyBox(flag.Args()[boxNameIdx])
+		err := c.Destroy(flag.Args()[boxNameIdx])
 		if err != nil {
 			log.Fatalln("Failed to destroy box:", err)
 		}

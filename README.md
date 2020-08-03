@@ -5,6 +5,7 @@ meant to be used in production or replace other solutions like *runC*, *LXC*, et
 The spec file (config.json) is based on the OCI spec, which means that you can easily convert existing specs - unsupported configs are ignored.
 
 *box* is also the container runtime powering an AWS Lambda mock in my other project [LWS](https://github.com/cprates/lws).
+If you would also like to use *box* in your project or play around with it, take a look at [here](https://github.com/cprates/lws/blob/lambda_draft/pkg/llambda/container.go). points to the draft_lambda ????????????????????????????????????????????
 
 
 ## Running a box (container)

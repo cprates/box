@@ -15,30 +15,30 @@ type state struct {
 	BoxConfig              config
 }
 
-func (c *cartonBox) saveState() (err error) {
-	f, err := os.Create(c.config.StateFilePath)
+func (b *boxInternal) saveState() (err error) {
+	f, err := os.Create(b.config.StateFilePath)
 	if err != nil {
 		return
 	}
 	defer f.Close()
 
-	err = json.NewEncoder(f).Encode(c.state)
+	err = json.NewEncoder(f).Encode(b.state)
 	return
 }
 
-func (c *cartonBox) loadState() (err error) {
-	f, err := os.Open(c.config.StateFilePath)
+func (b *boxInternal) loadState() (err error) {
+	f, err := os.Open(b.config.StateFilePath)
 	if err != nil {
 		return
 	}
 	defer f.Close()
 
-	err = json.NewDecoder(f).Decode(&c.state)
+	err = json.NewDecoder(f).Decode(&b.state)
 	return
 }
 
-func (c *carton) loadStateFromName(name string) (s *state, err error) {
-	f, err := os.Open(filepath.Join(c.workdir, name, stateFilename))
+func (m *manager) loadStateFromName(name string) (s *state, err error) {
+	f, err := os.Open(filepath.Join(m.workdir, name, stateFilename))
 	if err != nil {
 		return
 	}

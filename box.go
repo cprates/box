@@ -21,8 +21,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Boxer defines the interface to interact with a Box.
-type Boxer interface {
+// Box defines the interface to interact with a Box.
+type Box interface {
 	// Creates a new box with the given mame and spec, storing the state in workdir, using the
 	// given io channels to communicate with the outside world
 	create(name, workdir string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
@@ -33,7 +33,7 @@ type Boxer interface {
 	run(name, workdir string, io ProcessIO, spec *spec.Spec, opts ...BoxOption) (err error)
 }
 
-type cartonBox struct {
+type boxInternal struct {
 	state        state
 	childProcess process
 	config
@@ -71,10 +71,10 @@ type openResult struct {
 	err  error
 }
 
-var _ Boxer = (*cartonBox)(nil)
+var _ Box = (*boxInternal)(nil)
 
-func newCartonBox() Boxer {
-	return &cartonBox{
+func newCartonBox() Box {
+	return &boxInternal{
 		lock: sync.Mutex{},
 	}
 }
@@ -97,7 +97,7 @@ func boxCwd(specCwd string) string {
 }
 
 // here the workdir is from the box's point of view
-func (c *cartonBox) create(
+func (b *boxInternal) create(
 	name, workdir string,
 	io ProcessIO,
 	spec *spec.Spec,
@@ -105,8 +105,8 @@ func (c *cartonBox) create(
 ) (
 	err error,
 ) {
-	c.childProcess = process{io: io}
-	c.config = config{
+	b.childProcess = process{io: io}
+	b.config = config{
 		Name:           name,
 		Hostname:       boxHostname(name, spec.Hostname),
 		RootFs:         spec.Root.Path,
@@ -119,19 +119,19 @@ func (c *cartonBox) create(
 	}
 
 	for _, opt := range opts {
-		opt(c)
+		opt(b)
 	}
 
-	if err = c.createExecFifo(); err != nil {
+	if err = b.createExecFifo(); err != nil {
 		err = fmt.Errorf("creating exec fifo: %s", err)
 		return
 	}
 
 	// this is a much simpler implementation compared to runC so, at this point it just needs
 	// to re-execute itself setting all namespaces at once, except user ns.
-	err = c.start()
+	err = b.start()
 	if err != nil {
-		c.deleteExecFifo()
+		b.deleteExecFifo()
 		err = fmt.Errorf("creating container: %s", err)
 		return
 	}
@@ -141,7 +141,7 @@ func (c *cartonBox) create(
 
 // Run creates and starts a new box with name at workdir with the given spec, blocking until
 // the box is terminated.
-func (c *cartonBox) run(
+func (b *boxInternal) run(
 	name, workdir string,
 	io ProcessIO,
 	spec *spec.Spec,
@@ -149,8 +149,8 @@ func (c *cartonBox) run(
 ) (
 	err error,
 ) {
-	c.childProcess = process{io: io}
-	c.config = config{
+	b.childProcess = process{io: io}
+	b.config = config{
 		Name:           name,
 		Hostname:       boxHostname(name, spec.Hostname),
 		RootFs:         spec.Root.Path,
@@ -162,15 +162,15 @@ func (c *cartonBox) run(
 	}
 
 	for _, opt := range opts {
-		opt(c)
+		opt(b)
 	}
 
-	err = c.start()
+	err = b.start()
 	if err != nil {
 		return
 	}
 
-	<-awaitProcessExit(c.childProcess.pid, make(chan struct{}))
+	<-awaitProcessExit(b.childProcess.pid, make(chan struct{}))
 
 	err = os.RemoveAll(workdir)
 	if err != nil {
@@ -182,32 +182,32 @@ func (c *cartonBox) run(
 }
 
 // Start a previously create Box, returning immediately after the box is started.
-func (c *cartonBox) Start() error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+func (b *boxInternal) Start() error {
+	b.lock.Lock()
+	defer b.lock.Unlock()
 
 	// first check if the waiting child is still alive
-	stat, err := system.Stat(c.state.BoxPID)
+	stat, err := system.Stat(b.state.BoxPID)
 	if err != nil {
 		return fmt.Errorf("box is stopped")
 	}
 
-	if stat.StartTime != c.state.ProcessStartClockTicks ||
+	if stat.StartTime != b.state.ProcessStartClockTicks ||
 		stat.State == system.Zombie ||
 		stat.State == system.Dead {
 		return fmt.Errorf("box is stopped")
 	}
 
-	c.childProcess.pid = c.state.BoxPID
+	b.childProcess.pid = b.state.BoxPID
 
-	return c.exec()
+	return b.exec()
 }
 
-func (c *cartonBox) start() (err error) {
+func (b *boxInternal) start() (err error) {
 	cmd := exec.Command("/proc/self/exe", "bootstrap")
-	cmd.Stdin = c.childProcess.io.In
-	cmd.Stdout = c.childProcess.io.Out
-	cmd.Stderr = c.childProcess.io.Err
+	cmd.Stdin = b.childProcess.io.In
+	cmd.Stdout = b.childProcess.io.Out
+	cmd.Stderr = b.childProcess.io.Err
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS |
 			syscall.CLONE_NEWPID |
@@ -231,17 +231,17 @@ func (c *cartonBox) start() (err error) {
 
 	cmd.Env = []string{
 		"BOX_BOOTSTRAP_CONFIG_FD=" + strconv.Itoa(configFd),
-		"BOX_BOOTSTRAP_LOG_FD=" + strconv.Itoa(int(c.childProcess.io.Out.Fd())),
+		"BOX_BOOTSTRAP_LOG_FD=" + strconv.Itoa(int(b.childProcess.io.Out.Fd())),
 		"BOX_DEBUG=" + os.Getenv("BOX_DEBUG"),
 	}
 
 	// send box config
-	if err = json.NewEncoder(configWPipe).Encode(&c.config); err != nil {
+	if err = json.NewEncoder(configWPipe).Encode(&b.config); err != nil {
 		err = fmt.Errorf("sending config to child: %s", err)
 		return
 	}
 
-	if err = c.includeExecFifo(cmd); err != nil {
+	if err = b.includeExecFifo(cmd); err != nil {
 		err = fmt.Errorf("including fifo fd: %s", err)
 		return
 	}
@@ -251,25 +251,25 @@ func (c *cartonBox) start() (err error) {
 		return
 	}
 
-	c.childProcess.pid = cmd.Process.Pid
-	c.childProcess.created = true
-	c.state = state{
-		BoxPID:    c.childProcess.pid,
-		Created:   c.childProcess.created,
-		BoxConfig: c.config,
+	b.childProcess.pid = cmd.Process.Pid
+	b.childProcess.created = true
+	b.state = state{
+		BoxPID:    b.childProcess.pid,
+		Created:   b.childProcess.created,
+		BoxConfig: b.config,
 	}
 
 	stat, err := system.Stat(cmd.Process.Pid)
 	if err == nil {
-		c.state.ProcessStartClockTicks = stat.StartTime
+		b.state.ProcessStartClockTicks = stat.StartTime
 
-		if c.config.NetConfig != nil {
-			if err = c.setupNetFromConfig(); err != nil {
+		if b.config.NetConfig != nil {
+			if err = b.setupNetFromConfig(); err != nil {
 				return
 			}
 		}
 
-		if err = c.saveState(); err == nil {
+		if err = b.saveState(); err == nil {
 			return
 		}
 	}
@@ -311,12 +311,12 @@ func (c *cartonBox) start() (err error) {
 	return
 }
 
-func (c *cartonBox) exec() error {
+func (b *boxInternal) exec() error {
 	fifoOpen := make(chan struct{})
 	select {
-	case <-awaitProcessExit(c.childProcess.pid, fifoOpen):
+	case <-awaitProcessExit(b.childProcess.pid, fifoOpen):
 		return errors.New("box process is already dead")
-	case result := <-awaitFifoOpen(c.config.ExecFifoPath):
+	case result := <-awaitFifoOpen(b.config.ExecFifoPath):
 		close(fifoOpen)
 		if result.err != nil {
 			return result.err
@@ -330,48 +330,48 @@ func (c *cartonBox) exec() error {
 	}
 }
 
-func (c *cartonBox) createExecFifo() error {
-	if _, err := os.Stat(c.config.ExecFifoPath); err == nil {
-		return fmt.Errorf("exec fifo %s already exists", c.config.ExecFifoPath)
+func (b *boxInternal) createExecFifo() error {
+	if _, err := os.Stat(b.config.ExecFifoPath); err == nil {
+		return fmt.Errorf("exec fifo %s already exists", b.config.ExecFifoPath)
 	}
 	oldMask := unix.Umask(0000)
-	if err := unix.Mkfifo(c.config.ExecFifoPath, 0622); err != nil {
+	if err := unix.Mkfifo(b.config.ExecFifoPath, 0622); err != nil {
 		unix.Umask(oldMask)
-		err = fmt.Errorf("unable to create fifo at %q: %s", c.config.ExecFifoPath, err)
+		err = fmt.Errorf("unable to create fifo at %q: %s", b.config.ExecFifoPath, err)
 		return err
 	}
 	unix.Umask(oldMask)
 
 	// currently it does not support user namespaces so, uid and gid are always set to 0
-	return os.Chown(c.config.ExecFifoPath, 0, 0)
+	return os.Chown(b.config.ExecFifoPath, 0, 0)
 }
 
-func (c *cartonBox) deleteExecFifo() {
-	_ = os.Remove(c.config.ExecFifoPath)
+func (b *boxInternal) deleteExecFifo() {
+	_ = os.Remove(b.config.ExecFifoPath)
 }
 
 // includeExecFifo opens the box's execfifo as a pathfd, so that the
 // box cannot access the statedir (and the FIFO itself remains
 // un-opened). It then adds the FifoFd to the given exec.Cmd as an inherited
 // fd, with BOX_FIFO_FD set to its fd number.
-func (c *cartonBox) includeExecFifo(cmd *exec.Cmd) error {
-	if c.config.ExecFifoPath == "" {
+func (b *boxInternal) includeExecFifo(cmd *exec.Cmd) error {
+	if b.config.ExecFifoPath == "" {
 		return nil
 	}
 
-	fifoFd, err := unix.Open(c.config.ExecFifoPath, unix.O_PATH|unix.O_CLOEXEC, 0)
+	fifoFd, err := unix.Open(b.config.ExecFifoPath, unix.O_PATH|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err
 	}
 
-	cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(uintptr(fifoFd), c.config.ExecFifoPath))
+	cmd.ExtraFiles = append(cmd.ExtraFiles, os.NewFile(uintptr(fifoFd), b.config.ExecFifoPath))
 	cmd.Env = append(cmd.Env, fmt.Sprintf("BOX_FIFO_FD=%d", stdioFdCount+len(cmd.ExtraFiles)-1))
 	return nil
 }
 
-func (c *cartonBox) setupNetFromConfig() error {
+func (b *boxInternal) setupNetFromConfig() error {
 	// search for module
-	netConfig := c.config.NetConfig
+	netConfig := b.config.NetConfig
 	if netConfig.Model != nil {
 		m, err := boxnet.ModelFromConfig(netConfig.Model)
 		if err != nil {
@@ -385,7 +385,7 @@ func (c *cartonBox) setupNetFromConfig() error {
 			if err != nil {
 				return fmt.Errorf("parsing model config: %+v ** %s", netConfig.Model, err)
 			}
-			_, err = boxnet.NewBridgeModel(modelConfig.BrName, c.childProcess.pid, netConfig.Interfaces)
+			_, err = boxnet.NewBridgeModel(modelConfig.BrName, b.childProcess.pid, netConfig.Interfaces)
 			if err != nil {
 				return fmt.Errorf("creating network model: %s", err)
 			}
@@ -411,7 +411,7 @@ func (c *cartonBox) setupNetFromConfig() error {
 				return fmt.Errorf("parsing iface config: %+v ** %s", rawConf, err)
 			}
 
-			_, err = boxnet.AttachVeth(cfg, c.childProcess.pid)
+			_, err = boxnet.AttachVeth(cfg, b.childProcess.pid)
 			if err != nil {
 				return fmt.Errorf("unable to attach veth %q: %s", cfg.Name, t)
 			}
