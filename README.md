@@ -1,5 +1,5 @@
 # box
-*box* is a low-level Linux container runtime, the result of my journey in learning how containers work, and is not
+*box* is a low-level Linux container runtime (hence it only work on Linux), the result of my journey in learning how containers work, and is not
 meant to be used in production or replace other solutions like *runC*, *LXC*, etc.
 
 The spec file (config.json) is based on the OCI spec, which means that you can easily convert existing specs - unsupported configs are ignored.
