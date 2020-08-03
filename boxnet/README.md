@@ -1,12 +1,27 @@
-This is more like a wrapper on ```github.com/vishvananda/netlink``` to add a set of extra
-functionalities and supports Linux only. 
+`boxnet` is basically a wrapper around ```github.com/vishvananda/netlink``` to extend it by adding
+the concept of `models`. Its current state is a bit of a mess mainly because I started writing it
+without a clear idea of how it should look like. Basically a `model` represents a composite network
+setup and aims to make it easy to configure common network setups. In the future may be the
+network functionality should be decoupled from the runtime like Docker currently does.
 
-#### Supported interface types
-* veth
+### Supported interface types
+* veth: it's a normal veth pair
 
-#### Network Models
+### Network Models
 To activate a model add a model object to the config. When a module config is present, all
-interfaces are related to the module. Only one module is allowed per config.:
+interfaces are related to the module. Only one module is allowed per config/box:
+
+```
+"model": {
+   "type": "model_name",
+   "param1": "val1",
+   ...
+}
+```
+
+#### Supported models
+* Bridge: connects a `box` to an external network by creating and attaching a `veth` master to a
+  given bridge interface and moving the peer to the box NS. Example:
 
 ```
 "model": {
@@ -14,12 +29,6 @@ interfaces are related to the module. Only one module is allowed per config.:
    "bridge_name": "docker0"
 }
 ```
-
-##### Supported models
-* Bridge: TODO
-
-#### Examples
-TODO
 
 #### Config file
 
